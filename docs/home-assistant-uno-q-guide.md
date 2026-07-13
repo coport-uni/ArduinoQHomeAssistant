@@ -1,22 +1,25 @@
 # Home Assistant on Arduino UNO Q — Setup, Tapo Integration & Control Guide
 
-Reproducible procedure for provisioning any Arduino UNO Q board over ADB:
-connect it to WiFi, install Home Assistant (HA) with Docker, detect
-TP-Link Tapo P110M smart plugs, register them in HA (KLAP auth), and
-verify end-to-end control with a timed on/off toggle test. Everything is
-done from a host PC through `adb` — no monitor, keyboard, or SSH on the
-board required.
+Reproducible procedure for provisioning any Arduino UNO Q board over
+**WiFi/SSH**: install Home Assistant (HA) with Docker, detect TP-Link
+Tapo P110M smart plugs, register them in HA (KLAP auth), and verify
+end-to-end control with a timed on/off toggle test. A USB (ADB)
+connection is needed **once**, to join WiFi and enable SSH; after that
+the cable is removed and everything runs over the network. This keeps
+the board's USB port free for expansion devices such as a Zigbee
+dongle.
 
 Verified on: Arduino UNO Q (Debian 13 trixie, aarch64, kernel 6.16),
 Docker 26.1.5 on the board, Home Assistant Container 2026.7.2,
-2x Tapo P110M(KR) — detection, registration, and a 6/6-pass toggle test.
+2x Tapo P110M(KR) — detection, registration, and a 6/6-pass toggle
+test, all executed over SSH (2026-07-14).
 
 ## 0. Prerequisites
 
-- Host PC (Linux) with `adb` and Docker installed.
-- Arduino UNO Q connected to the host via USB. The board boots Debian;
-  the default Linux user is `arduino` and it is in the board's `docker`
-  group (no sudo needed for Docker on the board).
+- Host PC (Linux) with `ssh`/`scp`, plus `adb` for the one-time
+  bootstrap (step 1 only).
+- Arduino UNO Q. The default Linux user is `arduino` and it is in the
+  board's `docker` group (no sudo needed for Docker on the board).
 - 2.4 GHz WiFi SSID + password for the board.
 - Tapo P110M plugs already paired to the SAME WiFi network via the Tapo
   app, and powered on. (Pairing itself is done in the app; this guide
@@ -24,7 +27,9 @@ Docker 26.1.5 on the board, Home Assistant Container 2026.7.2,
 - ~2.5 GB free disk on the board (`df -h /`) for the HA image; ~1 GB RAM
   free while HA runs.
 
-## 1. ADB connection
+## 1. One-time bootstrap over ADB: USB permissions + WiFi
+
+Connect the board to the host via USB just for this step.
 
 ```bash
 adb devices -l
@@ -58,7 +63,7 @@ adb kill-server && adb devices
 Note: the workaround resets every time the board is re-plugged (the
 device number also changes); the udev rule is permanent.
 
-## 2. Connect the board to WiFi over ADB
+### Join the board to WiFi
 
 Check current state first — the board may already be connected:
 
@@ -81,6 +86,50 @@ adb shell "ip -4 addr show wlan0 | grep inet; ping -c 2 8.8.8.8"
 
 Record the board IP (referred to as `<BOARD_IP>` below). The connection
 persists across reboots (NetworkManager stores the profile).
+Recommended: give the board a fixed DHCP lease in your router so the IP
+never changes.
+
+## 2. Enable SSH and switch to WiFi-only operation
+
+Full details (fresh-image host-key fix, key installation, VS Code
+Remote-SSH) live in `docs/uno-q-vscode-wifi-guide.md`; the short
+version:
+
+```bash
+# 2a. Fresh images ship sshd without host keys — generate them once.
+#     (Needs root; uses the privileged-helper trick since `arduino`
+#     has no passwordless sudo but is in the docker group.)
+adb shell "docker run --rm --privileged --pid=host python:3.12-alpine \
+    nsenter -t 1 -m -u -i -n -p -- \
+    sh -c 'ssh-keygen -A && systemctl restart ssh && systemctl is-active ssh'"
+
+# 2b. Install your public key for passwordless login.
+PUB=$(cat ~/.ssh/id_ed25519.pub)
+adb shell "mkdir -p ~/.ssh && chmod 700 ~/.ssh \
+    && grep -qF '$PUB' ~/.ssh/authorized_keys 2>/dev/null \
+    || echo '$PUB' >> ~/.ssh/authorized_keys; \
+    chmod 600 ~/.ssh/authorized_keys"
+```
+
+Add a host alias to `~/.ssh/config` on the host (adjust the IP; state
+`Port 22` explicitly in case a global client config overrides it):
+
+```
+Host unoq
+    HostName <BOARD_IP>
+    User arduino
+    Port 22
+```
+
+Verify, then unplug the USB cable — it is no longer needed:
+
+```bash
+ssh unoq hostname   # prints the board hostname, no password prompt
+```
+
+Every command below runs from the host over WiFi: `ssh unoq '<cmd>'`
+executes on the board, `scp <file> unoq:<path>` copies files to it.
+(This repo's board is aliased `sungwooq`; substitute your own alias.)
 
 ## 3. Install Home Assistant with Docker
 
@@ -89,7 +138,7 @@ the `docker` group. Host networking is REQUIRED for HA device discovery
 (DHCP/mDNS/SSDP/UDP broadcasts).
 
 ```bash
-adb shell 'mkdir -p /home/arduino/homeassistant && \
+ssh unoq 'mkdir -p /home/arduino/homeassistant && \
   docker run -d --name homeassistant --restart=unless-stopped --privileged \
     -e TZ=Asia/Seoul \
     -v /home/arduino/homeassistant:/config \
@@ -101,7 +150,7 @@ adb shell 'mkdir -p /home/arduino/homeassistant && \
 The image pull takes several minutes on WiFi (~20 layers). Then:
 
 ```bash
-adb shell "docker ps --format '{{.Names}} {{.Status}}'; \
+ssh unoq "docker ps --format '{{.Names}} {{.Status}}'; \
   curl -s -o /dev/null -w 'HTTP %{http_code}\n' http://localhost:8123"
 ```
 
@@ -115,8 +164,8 @@ Option A — browser: open `http://<BOARD_IP>:8123` and follow the wizard.
 Option B — scripted (no browser), using `claude_test/ha_onboard.sh`:
 
 ```bash
-adb push claude_test/ha_onboard.sh /home/arduino/ha_onboard.sh
-adb shell 'HA_USER=arduino HA_PASS=<choose-a-password> \
+scp claude_test/ha_onboard.sh unoq:/home/arduino/ha_onboard.sh
+ssh unoq 'HA_USER=arduino HA_PASS=<choose-a-password> \
   bash /home/arduino/ha_onboard.sh'
 ```
 
@@ -137,8 +186,8 @@ Two independent checks. Run both; they should agree.
 ### 5a. Network-level check (python-kasa, from the board)
 
 ```bash
-adb push claude_test/probe_all.py /tmp/probe_all.py
-adb shell 'docker run --rm --network=host \
+scp claude_test/probe_all.py unoq:/tmp/probe_all.py
+ssh unoq 'docker run --rm --network=host \
   -v /tmp/probe_all.py:/probe.py python:3.12-alpine \
   sh -c "pip install -q python-kasa && python /probe.py 192.168.1"'
 ```
@@ -160,7 +209,7 @@ reliable test for Tapo devices).
 ### 5b. Home Assistant-level check (tplink integration discovery)
 
 ```bash
-adb shell 'TOKEN=$(cat /home/arduino/.ha_token)
+ssh unoq 'TOKEN=$(cat /home/arduino/.ha_token)
 resp=$(curl -s --max-time 180 -X POST \
   http://localhost:8123/api/config/config_entries/flow \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
@@ -200,9 +249,9 @@ over its WebSocket API; the board's system python has no aiohttp, so the
 minting script runs inside the HA container):
 
 ```bash
-adb push claude_test/mint_ll.py /tmp/mint_ll.py
-adb push claude_test/ha_login.sh /home/arduino/ha_login.sh
-adb shell 'HA_PASS=<HA-owner-password> bash /home/arduino/ha_login.sh'
+scp claude_test/mint_ll.py unoq:/tmp/mint_ll.py
+scp claude_test/ha_login.sh unoq:/home/arduino/ha_login.sh
+ssh unoq 'HA_PASS=<HA-owner-password> bash /home/arduino/ha_login.sh'
 ```
 
 Expected output ends with `long-lived token stored` and
@@ -220,7 +269,7 @@ Optional but recommended — verify the credentials directly against a
 plug first (fails in seconds, much faster feedback than the HA flow):
 
 ```bash
-adb shell 'docker run --rm --network=host python:3.12-alpine sh -c \
+ssh unoq 'docker run --rm --network=host python:3.12-alpine sh -c \
   "pip install -q python-kasa && \
    kasa --host <PLUG_IP> --username <email> --password <password> state"'
 ```
@@ -232,10 +281,10 @@ Then register each plug by MAC (lowercase, colon-separated — exactly as
 shown in the step 5b options list):
 
 ```bash
-adb push claude_test/ha_add_tapo.sh /home/arduino/ha_add_tapo.sh
-adb shell 'TAPO_USER=<email> TAPO_PASS=<password> \
+scp claude_test/ha_add_tapo.sh unoq:/home/arduino/ha_add_tapo.sh
+ssh unoq 'TAPO_USER=<email> TAPO_PASS=<password> \
   bash /home/arduino/ha_add_tapo.sh 18:69:45:71:05:2f'
-adb shell 'TAPO_USER=<email> TAPO_PASS=<password> \
+ssh unoq 'TAPO_USER=<email> TAPO_PASS=<password> \
   bash /home/arduino/ha_add_tapo.sh 18:69:45:71:02:7c'
 ```
 
@@ -248,7 +297,7 @@ Confirm the entities (each plug gets a main switch plus energy
 monitoring — voltage, current, live/daily/monthly consumption):
 
 ```bash
-adb shell 'curl -s http://localhost:8123/api/states \
+ssh unoq 'curl -s http://localhost:8123/api/states \
   -H "Authorization: Bearer $(cat /home/arduino/.ha_token)" \
   | python3 -c "import sys,json
 for e in json.load(sys.stdin):
@@ -264,11 +313,28 @@ it finishes on `turn_off`, so pick a plug whose load can tolerate that.
 
 CAUTION: check `sensor.<plug>_current_consumption` first and prefer a
 plug with 0 W — toggling a plug cuts power to whatever is connected.
+Note that the reading is only meaningful while the plug is ON: a plug
+whose relay is off ALWAYS reports 0 W, even with a load attached, so
+an off-state 0 W does not prove the socket is empty. Real example from
+this rig: a plug that read 0.0 W while off drew 89.4 W during the
+first ON window of the toggle test — a ~90 W device was connected the
+whole time and got power-cycled. If the plug is off and you cannot
+physically inspect the socket, turn it on once, wait a few seconds,
+and read the sensor before deciding it is safe to toggle. Short ON
+windows (3 s) may also be too brief for the connected device to
+restart, so the later ON samples can misleadingly show ~0 W.
+
+The script lives in this repo and reads the token on the board, so the
+easiest way to run it is to stream it over SSH — no copy step needed:
 
 ```bash
-adb push claude_test/toggle_test.sh /home/arduino/toggle_test.sh
-adb shell 'bash /home/arduino/toggle_test.sh switch.<plug_entity> 3'
+ssh unoq 'bash -s -- switch.<plug_entity> 3' \
+  < claude_test/toggle_test.sh
 ```
+
+(Equivalent two-step form: `scp claude_test/toggle_test.sh
+unoq:/home/arduino/` then `ssh unoq 'bash toggle_test.sh
+switch.<plug_entity> 3'`.)
 
 Expected (3 cycles = 6 transitions, ~3 s apart, relay clicks audibly):
 
@@ -308,9 +374,9 @@ wiring you know.
 ### 9a. Mosquitto broker (on the board)
 
 ```bash
-adb shell 'mkdir -p /home/arduino/mosquitto'
-adb push apps/mosquitto/mosquitto.conf /home/arduino/mosquitto/
-adb shell 'docker run -d --name mosquitto --restart=unless-stopped \
+ssh unoq 'mkdir -p /home/arduino/mosquitto'
+scp apps/mosquitto/mosquitto.conf unoq:/home/arduino/mosquitto/
+ssh unoq 'docker run -d --name mosquitto --restart=unless-stopped \
   --network=host -v /home/arduino/mosquitto:/mosquitto/config \
   eclipse-mosquitto:2'
 ```
@@ -324,8 +390,8 @@ the LAN.
 ### 9b. Register the MQTT integration in HA
 
 ```bash
-adb push claude_test/ha_add_mqtt.sh /home/arduino/
-adb shell 'bash /home/arduino/ha_add_mqtt.sh'
+scp claude_test/ha_add_mqtt.sh unoq:/home/arduino/
+ssh unoq 'bash /home/arduino/ha_add_mqtt.sh'
 ```
 
 PASS = `step2` response is `create_entry` with `"state":"loaded"`.
@@ -333,24 +399,25 @@ PASS = `step2` response is `create_entry` with `"state":"loaded"`.
 ### 9c. Deploy the bridge app (compiles + flashes the MCU)
 
 ```bash
-adb push apps/ha-mcu-bridge /home/arduino/ArduinoApps/
-adb shell 'TMPDIR=/tmp arduino-app-cli app start \
+scp -r apps/ha-mcu-bridge unoq:/home/arduino/ArduinoApps/
+ssh unoq 'arduino-app-cli app start \
   /home/arduino/ArduinoApps/ha-mcu-bridge'
 ```
 
-`TMPDIR=/tmp` is REQUIRED over adb: the board's adbd sets the
-Android-style `TMPDIR=/data/local/tmp`, which does not exist on Debian
-and fails the build with `Stat /Data/Local/Tmp: No Such File Or
-Directory`. (Over SSH this is not needed.) The first build compiles the
-zephyr core and flashes via on-board OpenOCD (SWD bitbang) — allow a
-few minutes. Note: the MCU runs ONE sketch at a time; starting this app
-replaces whatever app was flashed before (`arduino-app-cli app stop
-<other-app>` first for a clean switch).
+The first build compiles the zephyr core and flashes via on-board
+OpenOCD (SWD bitbang) — allow a few minutes. Note: the MCU runs ONE
+sketch at a time; starting this app replaces whatever app was flashed
+before (`arduino-app-cli app stop <other-app>` first for a clean
+switch). If you ever fall back to running app-cli over adb instead of
+SSH, prefix it with `TMPDIR=/tmp`: adbd sets the Android-style
+`TMPDIR=/data/local/tmp`, which does not exist on Debian and fails the
+build with `Stat /Data/Local/Tmp: No Such File Or Directory`. Over SSH
+this does not apply.
 
 Check the python side connected:
 
 ```bash
-adb shell 'docker logs ha-mcu-bridge-main-1 2>&1 | tail -3'
+ssh unoq 'docker logs ha-mcu-bridge-main-1 2>&1 | tail -3'
 # expect: "MQTT connected: Success"
 ```
 
@@ -358,7 +425,7 @@ adb shell 'docker logs ha-mcu-bridge-main-1 2>&1 | tail -3'
 
 ```bash
 # Discovery + state topics on the broker:
-adb shell 'docker exec mosquitto mosquitto_sub -h 127.0.0.1 \
+ssh unoq 'docker exec mosquitto mosquitto_sub -h 127.0.0.1 \
   -t "unoq/#" -C 7 -W 5 -v'
 # expect: unoq/bridge/availability online, six .../state OFF
 
@@ -366,8 +433,8 @@ adb shell 'docker exec mosquitto mosquitto_sub -h 127.0.0.1 \
 # switch.uno_q_mcu_uno_q_led3_r ... led4_b  (6 total)
 
 # End-to-end LED blink, 3 s cadence — LED3 blinks green on the board:
-adb shell 'bash /home/arduino/toggle_test.sh \
-  switch.uno_q_mcu_uno_q_led3_g 3'
+ssh unoq 'bash -s -- switch.uno_q_mcu_uno_q_led3_g 3' \
+  < claude_test/toggle_test.sh
 ```
 
 Verified result: 6/6 transitions OK, ~1 s command-to-state latency,
@@ -378,19 +445,22 @@ LED visibly blinking. The switches are also on the HA dashboard
 
 | Symptom | Cause / Fix |
 |---------|-------------|
-| `adb devices` shows `no permissions` | See step 1. Re-plugging the board resets the no-sudo workaround. |
+| `ssh` refused on port 22 | Fresh image: sshd has no host keys. Re-run step 2a (needs the USB cable once). |
+| `ssh` tries a strange port (e.g. 6800) | A global `Port` in the client's `/etc/ssh/ssh_config`. Pin `Port 22` in the per-host entry (step 2). |
+| Board unreachable after router restart | DHCP gave it a new IP. Reserve a fixed lease in the router, or find it again via `adb shell ip addr show wlan0` over USB. |
+| `adb devices` shows `no permissions` (bootstrap only) | See step 1. Re-plugging the board resets the no-sudo workaround. |
 | Only 1 of 2 plugs found | The missing plug is off, still unpaired, or on another network (e.g. router guest SSID with client isolation — the Tapo app still shows it as online via cloud, which is misleading). Check the plug's LED, then re-run 5a. A plug that just joined shows up immediately in unicast probing. |
 | No plugs found at all | Confirm the board and plugs share one subnet: compare `<BOARD_IP>` with the plug IPs shown in the Tapo app. Guest WiFi or a second router creates separate subnets. |
 | `docker run` fails with disk errors | `df -h /` on the board; the HA image needs ~2 GB unpacked. Remove unused images: `docker image prune -a`. |
-| Port 8123 not answering after 5 min | `docker logs homeassistant --tail 50` on the board. |
+| Port 8123 not answering after 5 min | `ssh unoq 'docker logs homeassistant --tail 50'`. |
 | HA API returns 401 | Access token expired (onboarding tokens last ~30 min). Run step 6 to mint a long-lived token. |
 | tplink flow shows no devices | HA needs host networking (`--network=host`); verify the container was started exactly as in step 3. Also confirm 5a passes first. |
 | Registration fails with `invalid_auth` | Wrong Tapo account email or password — KLAP is case-sensitive for both. Verify with the python-kasa one-liner in step 7 before retrying. A recently changed account password may not have propagated to the plug until it reconnects to the cloud. |
 | Failed flow left half-open | Config flows expire on their own, but you can abort one immediately: `curl -X DELETE .../api/config/config_entries/flow/<flow_id>`. |
 | Plug names don't match expectations | The HA entry title comes from the name set in the Tapo app (e.g. `tapo_p1`), which may not match your physical labels. Map name ↔ IP ↔ MAC with the step 7 entity listing before toggling anything. |
-| App build fails: `Stat /Data/Local/Tmp` | adbd sets `TMPDIR=/data/local/tmp` (Android convention) which doesn't exist on the Debian board. Prefix app-cli commands with `TMPDIR=/tmp` when working over adb (step 9c). |
+| App build fails: `Stat /Data/Local/Tmp` | Happens only when running app-cli over adb: adbd sets `TMPDIR=/data/local/tmp` (Android convention) which doesn't exist on the Debian board. Prefix with `TMPDIR=/tmp`, or just use SSH (step 9c). |
 | Bridge app logs `ConnectionRefusedError` to MQTT | App Lab python runs in a bridged container — host loopback is unreachable. The broker must also listen on 172.17.0.1 (step 9a) and the app must connect there (default in `main.py`, override with `MQTT_HOST`). |
-| MCU entities `unavailable` in HA | The bridge app is stopped (LWT set the availability topic to `offline`). `TMPDIR=/tmp arduino-app-cli app restart /home/arduino/ArduinoApps/ha-mcu-bridge`. |
+| MCU entities `unavailable` in HA | The bridge app is stopped (LWT set the availability topic to `offline`). `ssh unoq 'arduino-app-cli app restart /home/arduino/ArduinoApps/ha-mcu-bridge'`. |
 
 ## 11. File map
 
@@ -405,3 +475,4 @@ LED visibly blinking. The switches are also on the HA dashboard
 | `claude_test/ha_add_mqtt.sh` | Register the MQTT integration in HA (step 9b) |
 | `apps/mosquitto/mosquitto.conf` | Broker config, host-local listeners only (step 9a) |
 | `apps/ha-mcu-bridge/` | App Lab app: MCU sketch (RPC pin control) + python MQTT bridge with HA Discovery (step 9c) |
+| `docs/uno-q-vscode-wifi-guide.md` | Detailed SSH bootstrap + WiFi-only full-board development with VS Code (step 2) |

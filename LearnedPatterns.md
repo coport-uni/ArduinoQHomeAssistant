@@ -40,6 +40,14 @@ detection, #2 reproducibility guide, #3 WiFi + VS Code Remote-SSH,
   Verify exact-case credentials with python-kasa before the HA flow.
   **Rule**: Always pre-check Tapo credentials with python-kasa before
   registering in HA. (from ToDo#4)
+- **Problem**: A pre-toggle safety check read 0.0 W and was taken as
+  "no load", but HA history showed 89.4 W in the first ON window — a
+  ~90 W device was attached and got power-cycled. **Cause**: A plug
+  whose relay is off always reports 0 W regardless of what is plugged
+  in. **Fix**: Read the consumption sensor while the plug is ON (or
+  inspect the socket) before toggle tests; guide step 8 CAUTION now
+  says so. **Rule**: Never treat an off-state 0 W reading as proof
+  that a smart plug has no load. (from ToDo#8)
 
 ## §3. Library Quirks
 
@@ -68,7 +76,15 @@ detection, #2 reproducibility guide, #3 WiFi + VS Code Remote-SSH,
   yet published. **Fix**: Record the deviation explicitly in each
   ToDo.md entry and continue with ToDo.md-only tracking. **Rule**:
   Always record §4 workflow deviations in the ToDo.md entry until the
-  repo gains a remote. (from ToDo#1, ToDo#3)
+  repo gains a remote. (Resolved 2026-07-14: remote exists; full
+  issue/branch/PR flow used from ToDo#8 on.) (from ToDo#1, ToDo#3)
+- **Problem**: Repo-local board scripts were copied with `adb push`
+  before every run, so the board copy drifted from the repo. **Cause**:
+  Two-step copy-then-run workflow. **Fix**: Stream the script over SSH
+  stdin: `ssh <board> 'bash -s -- <args>' < claude_test/<script>.sh`.
+  **Rule**: Always prefer `bash -s` over-SSH streaming for repo-local
+  board scripts; copy only files that must persist on the board.
+  (from ToDo#8)
 
 ## §5. Environment Specifics
 

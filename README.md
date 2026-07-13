@@ -9,8 +9,10 @@ a single **Arduino UNO Q** board:
 - The board's own **STM32U585 MCU pins** (on-board RGB LEDs, optionally
   header pins D2–D13) appear in Home Assistant as switches, wired
   through MQTT and the UNO Q's internal Linux↔MCU RPC bridge.
-- Everything is driven remotely from a host PC over **ADB** — no
-  monitor, keyboard, or even SSH required.
+- Everything is driven remotely from a host PC over **WiFi (SSH)**.
+  USB/ADB is used exactly once, to join WiFi and enable SSH — after
+  that the USB port stays free for expansion devices such as a Zigbee
+  dongle.
 
 All procedures were verified end-to-end on real hardware (see
 [Verified results](#verified-results)).
@@ -88,7 +90,7 @@ Two consequences that surprise R4 users most:
 
 | Path | What it is |
 |---|---|
-| `docs/home-assistant-uno-q-guide.md` | **Main guide**: step-by-step from `adb devices` to controlling MCU pins from HA, with troubleshooting. Start here. |
+| `docs/home-assistant-uno-q-guide.md` | **Main guide**: step-by-step from the one-time ADB bootstrap to controlling MCU pins from HA over SSH, with troubleshooting. Start here. |
 | `docs/uno-q-vscode-wifi-guide.md` | Developing the UNO Q over WiFi with VS Code Remote-SSH (no USB cable) |
 | `apps/ha-mcu-bridge/` | App Lab app: MCU sketch (pin RPC) + Python MQTT bridge with HA Discovery |
 | `apps/mosquitto/mosquitto.conf` | MQTT broker config (host-local listeners, nothing on the LAN) |
@@ -107,27 +109,31 @@ git clone --recurse-submodules https://github.com/coport-uni/ArduinoQTest.git
 Condensed from the main guide — read it for details and expected output:
 
 ```bash
-# 1. Board over USB; fix permissions if "no permissions" shows up
+# 1. One-time bootstrap over USB: fix ADB permissions if needed, join
+#    WiFi, enable SSH + install your key (guide steps 1-2). Then add a
+#    `unoq` alias to ~/.ssh/config and unplug the cable.
 adb devices -l
-
-# 2. WiFi (skip if already connected)
 adb shell 'nmcli device wifi connect "<SSID>" password "<PW>"'
+ssh unoq hostname   # from here on, WiFi only
 
-# 3. Home Assistant
-adb shell 'mkdir -p /home/arduino/homeassistant && docker run -d \
+# 2. Home Assistant
+ssh unoq 'mkdir -p /home/arduino/homeassistant && docker run -d \
   --name homeassistant --restart=unless-stopped --privileged \
   -e TZ=Asia/Seoul -v /home/arduino/homeassistant:/config \
   -v /run/dbus:/run/dbus:ro --network=host \
   ghcr.io/home-assistant/home-assistant:stable'
 
-# 4. Onboard + long-lived token (scripts from claude_test/)
-adb shell 'HA_USER=arduino HA_PASS=<pw> bash /home/arduino/ha_onboard.sh'
-adb shell 'HA_PASS=<pw> bash /home/arduino/ha_login2.sh'
+# 3. Onboard + long-lived token (scripts from claude_test/)
+scp claude_test/{ha_onboard.sh,ha_login.sh} unoq:/home/arduino/
+scp claude_test/mint_ll.py unoq:/tmp/
+ssh unoq 'HA_USER=arduino HA_PASS=<pw> bash /home/arduino/ha_onboard.sh'
+ssh unoq 'HA_PASS=<pw> bash /home/arduino/ha_login.sh'
 
-# 5. Tapo plugs: verify → register (guide steps 5 and 7)
+# 4. Tapo plugs: verify → register (guide steps 5 and 7)
 
-# 6. MCU bridge: broker + MQTT integration + app (guide step 9)
-adb shell 'TMPDIR=/tmp arduino-app-cli app start \
+# 5. MCU bridge: broker + MQTT integration + app (guide step 9)
+scp -r apps/ha-mcu-bridge unoq:/home/arduino/ArduinoApps/
+ssh unoq 'arduino-app-cli app start \
   /home/arduino/ArduinoApps/ha-mcu-bridge'
 ```
 
@@ -136,9 +142,10 @@ adb shell 'TMPDIR=/tmp arduino-app-cli app start \
 The full list lives in the guide's troubleshooting table; the ones that
 cost the most time:
 
-- **adb + app builds**: adbd sets Android-style `TMPDIR=/data/local/tmp`
-  which does not exist on Debian — app builds die with
-  `Stat /Data/Local/Tmp`. Prefix with `TMPDIR=/tmp` (not needed via SSH).
+- **adb + app builds** (only if you fall back to adb instead of SSH):
+  adbd sets Android-style `TMPDIR=/data/local/tmp` which does not exist
+  on Debian — app builds die with `Stat /Data/Local/Tmp`. Prefix with
+  `TMPDIR=/tmp`. Over SSH this does not apply.
 - **App Lab networking**: app Python runs in a *bridged* Docker
   container — `127.0.0.1` is the container, not the board. Services it
   must reach (like the MQTT broker) need a listener on `172.17.0.1`.
