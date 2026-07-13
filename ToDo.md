@@ -184,3 +184,36 @@ are skipped for this bootstrap push by explicit instruction.
 - [x] Add .gitignore (Python + App Lab build artifacts + secrets,
       incl. .ha_token)
 - [x] Commit all project content and push to origin/main
+
+## 2026-07-14 — Switch the HA workflow from ADB to WiFi/SSH
+
+Requested by user: the board's USB port must stay free for expansion
+devices (e.g. a Zigbee dongle), so Home Assistant on the UNO Q should
+be managed over WiFi/SSH per docs/uno-q-vscode-wifi-guide.md, with ADB
+reduced to the one-time bootstrap. Verification: toggle switch.tapo_p1
+on/off for 3 cycles at 3-second intervals over SSH. (see LP §2, §5)
+
+- [x] Rework docs/home-assistant-uno-q-guide.md: ssh/scp as the primary
+      transport, ADB folded into a one-time bootstrap section that
+      references the WiFi guide (see LP §2, §5)
+- [x] Update README.md (intro, quick start, gotchas, repo layout) to
+      the SSH-first workflow
+- [x] Update claude_test/README.md re-run instructions to ssh, fix the
+      ha_onboard.sh header comment, rename mint_ll.py token client name
+- [x] Verify over SSH: run claude_test/toggle_test.sh on switch.tapo_p1
+      for 3 cycles at 3 s intervals with state checks after each command
+
+### Results (2026-07-14)
+
+- Guide restructured: step 1 = one-time ADB bootstrap (USB perms +
+  WiFi), step 2 = SSH enablement pointing at the WiFi guide; steps 3-9
+  keep their numbers, so existing cross-references stay valid. All
+  `adb push`/`adb shell` commands became `scp`/`ssh unoq`. The
+  `TMPDIR=/tmp` requirement is now documented as adb-only fallback.
+- mint_ll.py: token client_name adb-cli -> unoq-cli; file also brought
+  Ruff-clean (import splitting, no semicolons) per the lint hook.
+- Verification over SSH only (USB not involved): tapo_p1 pre-checked at
+  0.0 W load, then `ssh sungwooq 'bash -s -- switch.tapo_p1 3'
+  < claude_test/toggle_test.sh` -> 6/6 transitions OK at 3 s cadence,
+  final state off restored. GitHub issue #1, branch
+  docs/wifi-ssh-workflow.

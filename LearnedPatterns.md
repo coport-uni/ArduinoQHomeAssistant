@@ -68,7 +68,15 @@ detection, #2 reproducibility guide, #3 WiFi + VS Code Remote-SSH,
   yet published. **Fix**: Record the deviation explicitly in each
   ToDo.md entry and continue with ToDo.md-only tracking. **Rule**:
   Always record §4 workflow deviations in the ToDo.md entry until the
-  repo gains a remote. (from ToDo#1, ToDo#3)
+  repo gains a remote. (Resolved 2026-07-14: remote exists; full
+  issue/branch/PR flow used from ToDo#8 on.) (from ToDo#1, ToDo#3)
+- **Problem**: Repo-local board scripts were copied with `adb push`
+  before every run, so the board copy drifted from the repo. **Cause**:
+  Two-step copy-then-run workflow. **Fix**: Stream the script over SSH
+  stdin: `ssh <board> 'bash -s -- <args>' < claude_test/<script>.sh`.
+  **Rule**: Always prefer `bash -s` over-SSH streaming for repo-local
+  board scripts; copy only files that must persist on the board.
+  (from ToDo#8)
 
 ## §5. Environment Specifics
 

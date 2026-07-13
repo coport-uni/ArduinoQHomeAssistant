@@ -1,7 +1,8 @@
 #!/bin/bash
 # Complete Home Assistant onboarding via REST API and save an access token.
-# Run ON THE BOARD (adb shell). Works only on a fresh HA instance: the
-# user-creation step fails once onboarding has already been completed.
+# Run ON THE BOARD (over SSH, or adb shell during bootstrap). Works only
+# on a fresh HA instance: the user-creation step fails once onboarding
+# has already been completed.
 #
 # Env overrides: HA_BASE  (default http://localhost:8123)
 #                HA_USER  (default arduino)
