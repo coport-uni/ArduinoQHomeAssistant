@@ -313,6 +313,16 @@ it finishes on `turn_off`, so pick a plug whose load can tolerate that.
 
 CAUTION: check `sensor.<plug>_current_consumption` first and prefer a
 plug with 0 W — toggling a plug cuts power to whatever is connected.
+Note that the reading is only meaningful while the plug is ON: a plug
+whose relay is off ALWAYS reports 0 W, even with a load attached, so
+an off-state 0 W does not prove the socket is empty. Real example from
+this rig: a plug that read 0.0 W while off drew 89.4 W during the
+first ON window of the toggle test — a ~90 W device was connected the
+whole time and got power-cycled. If the plug is off and you cannot
+physically inspect the socket, turn it on once, wait a few seconds,
+and read the sensor before deciding it is safe to toggle. Short ON
+windows (3 s) may also be too brief for the connected device to
+restart, so the later ON samples can misleadingly show ~0 W.
 
 The script lives in this repo and reads the token on the board, so the
 easiest way to run it is to stream it over SSH — no copy step needed:

@@ -202,6 +202,9 @@ on/off for 3 cycles at 3-second intervals over SSH. (see LP §2, §5)
       ha_onboard.sh header comment, rename mint_ll.py token client name
 - [x] Verify over SSH: run claude_test/toggle_test.sh on switch.tapo_p1
       for 3 cycles at 3 s intervals with state checks after each command
+- [x] Post-test history check found tapo_p1 had a ~90 W load (89.4 W in
+      the first ON window) despite the off-state 0.0 W pre-check; guide
+      step 8 CAUTION extended to warn that off-state 0 W hides a load
 
 ### Results (2026-07-14)
 
