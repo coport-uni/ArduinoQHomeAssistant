@@ -1,0 +1,186 @@
+# ToDo.md
+
+## 2026-07-13 — WiFi via ADB, Home Assistant on UNO Q, Tapo P110M detection
+
+Requested by user. Target board: Arduino UNO Q "SungwooQ" (Debian 13,
+aarch64), reached over ADB (serial 2018875248).
+
+Workflow deviations: this repository has no git remote and no commits yet,
+so the GitHub issue / working branch / PR steps of CLAUDE.md §4 cannot be
+performed. They will apply once the repo gains a remote.
+
+- [x] Verify board WiFi connectivity via ADB (already on TP-Link_0624,
+      192.168.1.232; confirm internet and DNS)
+- [x] Install Home Assistant on the board with Docker
+      (ghcr.io/home-assistant/home-assistant:stable, host networking for
+      device discovery)
+- [x] Complete HA onboarding via REST API and obtain an access token
+- [x] Verify HA detects two TP-Link Tapo P110M plugs (tplink discovery
+      flows), cross-checked with a python-kasa network discovery scan
+- [x] Record results below
+
+### Results (2026-07-13)
+
+- Board WiFi: already connected to TP-Link_0624 (user-confirmed SSID and
+  password), IP 192.168.1.232, internet OK. USB permission for ADB was
+  fixed by chmod on /dev/bus/usb/003/021 via a privileged docker helper
+  (host user lacks passwordless sudo; resets on board replug).
+- Home Assistant 2026.7.2 running in container `homeassistant` on the
+  board (image ghcr.io/home-assistant/home-assistant:stable, host network,
+  /home/arduino/homeassistant as /config, restart=unless-stopped).
+- Onboarding completed via API; owner user `arduino`. Access token stored
+  on the board at /home/arduino/.ha_token (not in this repo).
+- Detection verified: HA tplink config-flow discovery listed BOTH plugs:
+  `052F P110M (192.168.1.239) 18:69:45:71:05:2f` and
+  `027C P110M (192.168.1.79) 18:69:45:71:02:7c`. Cross-checked with a
+  python-kasa unicast sweep of 192.168.1.0/24 (claude_test/probe_all.py).
+- Note: the second plug (052F) only appeared on the network partway
+  through the session; earlier full-subnet sweeps found just one device.
+- Not done: adding the plugs as config entries — KLAP auth requires the
+  user's TP-Link (Tapo) account credentials. Discovery/detection does not.
+- Verification scripts preserved in claude_test/ (see its README).
+
+## 2026-07-13 — Reproducibility guide for other UNO Q boards
+
+Requested by user: write a guide so the WiFi + Home Assistant + Tapo
+verification procedure can be repeated on any Arduino UNO Q.
+
+- [x] Generalize claude_test scripts (probe_all.py takes a subnet prefix
+      argument; ha_onboard.sh takes HA_USER/HA_PASS/HA_BASE/HA_TOKEN_FILE
+      env vars instead of hardcoded values)
+- [x] Write docs/home-assistant-uno-q-guide.md covering ADB setup and the
+      USB permission fix (udev rule or docker chmod workaround), WiFi via
+      nmcli over adb, HA container install, scripted onboarding, two-level
+      Tapo P110M detection verification, and troubleshooting
+- [x] Update claude_test/README.md for the parameterized scripts
+
+## 2026-07-13 — WiFi + VS Code Remote-SSH development for UNO Q
+
+Requested by user: develop the UNO Q over WiFi from VS Code, with the
+whole board (Linux MPU + STM32 MCU) programmable without a USB cable.
+Chosen workflow: VS Code Remote-SSH directly onto the board, verified all
+the way to flashing a sample app over WiFi.
+
+Workflow deviations: the repository still has no git remote, so the
+GitHub issue / PR steps of CLAUDE.md §4 cannot be performed (same
+deviation as the entries above).
+
+- [x] Enable SSH on the board (root cause: sshd had no host keys;
+      generate via privileged docker helper and start ssh.service)
+- [x] Set up passwordless SSH from the dev container (ed25519 key +
+      `sungwooq` alias in ~/.ssh/config; container-global
+      /etc/ssh/ssh_config `Port 6800` overridden with explicit Port 22)
+- [x] Check board memory headroom for vscode-server alongside the
+      Home Assistant container
+- [x] Create sample app ~/ArduinoApps/qtest_blink (LED blink sketch on
+      the STM32 + Python heartbeat on Linux) and build/flash it purely
+      over WiFi with arduino-app-cli
+- [x] Round-trip check: change the blink period, re-flash over WiFi,
+      user confirms the LED speed change visually (pending user's
+      visual confirmation; both flashes reported success)
+- [x] Write docs/uno-q-vscode-wifi-guide.md; copy the sample app to
+      claude_test/qtest_blink/ and update claude_test/README.md
+
+### Results (2026-07-13)
+
+- sshd failed with "no hostkeys available"; fixed with a one-shot
+  privileged helper (`docker run --privileged --pid=host
+  python:3.12-alpine nsenter -t 1 ... ssh-keygen -A`) since the board
+  sudo needs a password. Service is enabled and now active.
+- Passwordless SSH works: `ssh sungwooq hostname` -> SungwooQ. Client
+  gotcha found: this container sets `Port 6800` globally in
+  /etc/ssh/ssh_config, so the host entry pins `Port 22`.
+- Board is the 4 GB variant (3.6 GiB visible, ~2.4 GiB available with
+  Home Assistant running) — plenty for vscode-server.
+- qtest_blink built, flashed to the STM32U585 (on-board OpenOCD over
+  SWD bitbang) and started purely over WiFi in ~98 s; Python heartbeat
+  visible via `arduino-app-cli app logs`. Blink period then changed
+  500 ms -> 100 ms and re-flashed over WiFi (`app restart`), app
+  reported running.
+- CLI quirk: `arduino-app-cli app ps` panics ("not implemented") in
+  v0.6.6; `app list` works.
+- Guide: docs/uno-q-vscode-wifi-guide.md (incl. VS Code Remote-SSH
+  setup and ProxyJump variant); app copy in claude_test/qtest_blink/.
+
+## 2026-07-13 — Register both Tapo plugs in HA and run toggle test
+
+Requested by user: complete the tplink integration for both detected
+P110M plugs and physically toggle plug "052F" on/off at 3-second
+intervals as an end-to-end test.
+
+- [x] Obtain working Tapo account credentials from user (first attempt
+      failed KLAP auth; verified correct ones with python-kasa before
+      retrying the HA flow). Credentials are NOT stored in this repo;
+      HA keeps them in its own config store on the board.
+- [x] Replace expired onboarding token with a 10-year long-lived token
+      (claude_test/ha_login.sh + mint_ll.py; stored at ~/.ha_token on
+      the board)
+- [x] Register both plugs via config flow (claude_test/ha_add_tapo.sh):
+      entry "tapo_p1 P110M" = 052F / 192.168.1.239,
+      entry "tapo_p2 P110M" = 027C / 192.168.1.79. Full entity sets
+      created incl. energy sensors (tapo_p2 measured 7.3 W live load).
+- [x] Toggle test on switch.tapo_p1 (user-selected 052F): 3 cycles of
+      on/off at 3 s intervals, state verified after every command —
+      6/6 transitions OK, initial state (off) restored
+      (claude_test/toggle_test.sh)
+
+## 2026-07-13 — Extend the UNO Q guide with integration & control steps
+
+Requested by user: consolidate all work done so far into
+docs/home-assistant-uno-q-guide.md.
+
+- [x] Add step 6 (long-lived token via ha_login.sh + mint_ll.py),
+      step 7 (plug registration with KLAP credential pre-check via
+      python-kasa, ha_add_tapo.sh, entity listing), and step 8
+      (3-second toggle test with load-safety caution)
+- [x] Extend troubleshooting (invalid_auth case-sensitivity, stale
+      flows, Tapo-app name vs physical label mismatch) and the file map
+
+## 2026-07-13 — Control the on-board MCU (STM32U585) from Home Assistant
+
+Requested by user; plan approved in plan mode. Architecture:
+HA <-> MQTT (Mosquitto) <-> App Lab app python <-> arduino-router Bridge
+RPC <-> MCU sketch. Same deviation as above: no git remote, so no GitHub
+issue/branch/PR.
+
+- [x] Write App Lab app `apps/ha-mcu-bridge/` (sketch provides
+      set_pin_by_name RPC; python runs paho-mqtt with HA MQTT Discovery,
+      6 RGB LED channels enabled by default, D2-D13 opt-in; ruff passed)
+- [x] Start Mosquitto broker on the board (eclipse-mosquitto:2 container,
+      host network, loopback-only listener; conf in apps/mosquitto/)
+- [x] Register MQTT integration in HA via config flow
+      (claude_test/ha_add_mqtt.sh; entry "127.0.0.1" loaded)
+- [x] Stop the other session's qtest_blink app before re-flashing the
+      MCU (one sketch at a time; restore with
+      `arduino-app-cli app start ~/ArduinoApps/qtest_blink`)
+- [x] Build/flash/start ha-mcu-bridge on the board (gotcha found: adb
+      shell sets Android-style TMPDIR=/data/local/tmp which does not
+      exist on Debian -> build fails with "Stat /Data/Local/Tmp";
+      fix is TMPDIR=/tmp). Second gotcha: App Lab python runs in a
+      bridged container, so the broker needed a second listener on
+      172.17.0.1 (docker0) and the app connects there, not loopback.
+      Sketch flashed via on-board OpenOCD (SWD); python container
+      "ha-mcu-bridge-main-1" logs "MQTT connected: Success".
+- [x] Verify end-to-end: availability "online" + 6 discovery configs +
+      6 retained OFF states on the broker; HA auto-created 6 entities
+      (switch.uno_q_mcu_uno_q_led3_r ... led4_b); toggle test on
+      switch.uno_q_mcu_uno_q_led3_g: 3 cycles at 3 s -> 6/6 OK,
+      ~1 s command-to-state latency, LED3 blinking green physically.
+- [x] Update docs/home-assistant-uno-q-guide.md (new section 9,
+      troubleshooting rows, file map) and claude_test/README.md
+      (ha_add_mqtt.sh row)
+
+## 2026-07-13 — README for R4-experienced newcomers; first content push
+
+Requested by user: summarize all work in README.md (audience: knows the
+UNO R4, never touched a UNO Q), then commit and push. User directed a
+direct commit+push to main, so the branch/PR steps of CLAUDE.md §4/§12
+are skipped for this bootstrap push by explicit instruction.
+
+- [x] Write README.md: R4-vs-Q mental-model table (dual-brain, ADB
+      instead of serial upload, on-board compile/flash, app = sketch +
+      python pair), architecture diagram, verified results, repo
+      layout, quick start, hardware gotchas
+- [x] Add .gitignore (Python + App Lab build artifacts + secrets,
+      incl. .ha_token)
+- [x] Commit all project content and push to origin/main

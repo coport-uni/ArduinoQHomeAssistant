@@ -1,0 +1,31 @@
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.venv/
+venv/
+
+# ===== Arduino / App Lab build artifacts =====
+.cache/
+*.elf
+*.bin
+*.hex
+
+# ===== Editor / OS =====
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ===== Secrets =====
+.env
+.env.local
+*.key
+*.pem
+.ha_token

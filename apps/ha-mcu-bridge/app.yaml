@@ -1,0 +1,3 @@
+name: HA MCU Bridge
+icon: 🏠
+description: Exposes UNO Q MCU pins to Home Assistant as MQTT switches.
