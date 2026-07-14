@@ -279,3 +279,29 @@ the user's request. (see LP §1, §3)
       bars updating
 - [x] Document in guide step 9c + troubleshooting row; LearnedPatterns
       entry
+
+## 2026-07-14 — Make the README Quick start self-sufficient
+
+Requested by user. The Quick start's step 1 mentioned "enable SSH +
+install your key (guide steps 1-2)" only in a comment and then jumped
+straight to `ssh unoq` — impossible on a fresh board (sshd ships
+without host keys, no authorized key, no `unoq` alias; see LP §2).
+Steps 4-5 likewise pointed at guide sections without commands. Goal:
+following the Quick start ALONE on a brand-new UNO Q must reproduce
+every verified feature (WiFi+SSH bootstrap, HA, long-lived token,
+Tapo registration, MQTT broker + integration, ha-mcu-bridge app with
+HA LED switches + matrix load bars, end-to-end toggle checks).
+
+Workflow note: stacked on feature/matrix-sysload because PR #4 is
+still open and the Quick start being fixed documents the matrix
+feature; branch docs/quickstart-complete targets feature/matrix-sysload
+instead of main.
+
+- [x] Rewrite README Quick start to be fully executable end-to-end:
+      adb udev fallback, sshd host-key generation + public-key install
+      + `unoq` ssh alias (guide step 2, see LP §2), Tapo MAC discovery
+      (probe_all.py) + per-MAC registration (ha_add_tapo.sh),
+      Mosquitto + MQTT integration + app deploy + boot default app,
+      switch-entity listing, and both toggle verifications
+- [ ] GitHub issue, branch docs/quickstart-complete, PR onto
+      feature/matrix-sysload
