@@ -93,6 +93,15 @@ detection, #2 reproducibility guide, #3 WiFi + VS Code Remote-SSH,
   determine undocumented frame formats by decoding known-good example
   assets before resorting to on-hardware trial. (from ToDo#9)
 
+- **Problem**: The post-write ruff hook rejected code hand-wrapped to
+  80 columns ("Would reformat") although `ruff format --line-length 80`
+  accepted it. **Cause**: The repo had no pyproject.toml, so the hook's
+  bare `ruff format --check` fell back to Ruff's 88-column default,
+  which re-joins wrapped lines that fit under 88. **Fix**: Root
+  pyproject.toml with `[tool.ruff] line-length = 80` (PR #10).
+  **Rule**: Always give a CommonClaude repo a root pyproject.toml with
+  line-length 80 before writing Python. (from ToDo#12)
+
 ## §4. Workflow Lessons
 
 - **Problem**: CLAUDE.md §4 requires GitHub issue/branch/PR but the repo

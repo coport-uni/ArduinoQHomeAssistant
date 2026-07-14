@@ -354,3 +354,20 @@ MIT-convention findings from the review. Behavior must not change.
 - [x] Verify on the board: deploy, app restart (see LP §3 venv note),
       "MQTT connected" in logs, HA switch toggle, matrix bars
 - [x] GitHub issue, branch refactor/bridge-god-class, PR
+
+### Results (2026-07-14)
+
+- HaMcuBridge class in place: run() is the only public method;
+  _handle_connect/_handle_message are the paho-mqtt callbacks; five
+  underscore helpers; client and bridge_lock absorbed into __init__.
+  The main() + __main__ guard is safe because the App Lab run.sh
+  execs `python /app/python/main.py` (verified inside the container).
+- The repo had no pyproject.toml, so the CommonClaude post-write ruff
+  hook checked at Ruff's 88-column default and rejected 80-column
+  wrapping; added a root pyproject.toml with line-length = 80 and a
+  LearnedPatterns §3 entry.
+- On-board verification (SungwooQ): scp + `app restart`; log shows
+  "MQTT connected: Success"; availability topic "online"; LED3_G
+  ON/OFF over MQTT echoed on the state topic with matching log lines;
+  0 "stats push failed" over 3 min. GitHub issue #9, branch
+  refactor/bridge-god-class, PR #10.
