@@ -423,6 +423,16 @@ ssh unoq 'docker logs ha-mcu-bridge-main-1 2>&1 | tail -3'
 # expect: "MQTT connected: Success"
 ```
 
+App Lab apps do NOT auto-start after a board reboot (HA and Mosquitto
+do, via their Docker restart policies). Register the app as the
+"default app" so the arduino-app-cli daemon starts it at boot:
+
+```bash
+ssh unoq 'arduino-app-cli properties set default \
+  /home/arduino/ArduinoApps/ha-mcu-bridge'
+# verify: arduino-app-cli properties get default
+```
+
 ### 9d. Verify and toggle
 
 ```bash
@@ -501,6 +511,7 @@ after, while the HA switch path keeps passing 6/6 (section 9d test).
 | Bridge app logs `ConnectionRefusedError` to MQTT | App Lab python runs in a bridged container — host loopback is unreachable. The broker must also listen on 172.17.0.1 (step 9a) and the app must connect there (default in `main.py`, override with `MQTT_HOST`). |
 | MCU entities `unavailable` in HA | The bridge app is stopped (LWT set the availability topic to `offline`). `ssh unoq 'arduino-app-cli app restart /home/arduino/ArduinoApps/ha-mcu-bridge'`. |
 | App python crashes `ModuleNotFoundError` after adding a dependency | `app restart` reuses the cached venv in `<app>/.cache/.venv` and does not react to `requirements.txt` changes. `app stop`, then `rm -rf <app>/.cache/.venv`, then `app start` to reprovision. |
+| MCU entities `unavailable` after a board reboot | App Lab apps do not auto-start on boot. Register the app as the default app (step 9c) for automatic start, or run `arduino-app-cli app start <app-dir>` manually. |
 
 ## 11. File map
 

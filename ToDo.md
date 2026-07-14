@@ -261,3 +261,21 @@ Bridge RPC). (see LP §3, §5)
   toggle_test.sh on switch.uno_q_mcu_uno_q_led3_g passed 6/6
   concurrently; user visually confirmed the layout. GitHub issue #3,
   branch feature/matrix-sysload.
+
+## 2026-07-14 — Auto-start ha-mcu-bridge on boot
+
+Requested by user after a board reboot left the app stopped (HA and
+Mosquitto auto-restart via Docker policies, but App Lab apps do not
+auto-start). Included in the feature/matrix-sysload branch / PR #4 at
+the user's request. (see LP §1, §3)
+
+- [x] Find the supported mechanism: arduino-app-cli daemon starts the
+      "default app" at boot (`properties set default <app_path>`);
+      no systemd/cron hack needed
+- [x] Register /home/arduino/ArduinoApps/ha-mcu-bridge as default app
+      on the board and confirm with `properties get default`
+- [ ] Verify end-to-end: reboot the board, confirm the app container
+      comes up without manual start, MCU entities available, matrix
+      bars updating
+- [x] Document in guide step 9c + troubleshooting row; LearnedPatterns
+      entry

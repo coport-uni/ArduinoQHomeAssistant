@@ -68,6 +68,13 @@ detection, #2 reproducibility guide, #3 WiFi + VS Code Remote-SSH,
   **Cause**: No aiohttp installed system-wide. **Fix**: Run them inside
   the HA container. **Rule**: Always run HA WebSocket tooling inside the
   `homeassistant` container. (from ToDo#4)
+- **Problem**: After a board reboot, HA and Mosquitto came back but
+  the App Lab app stayed stopped (MCU entities unavailable, matrix
+  dark). **Cause**: App Lab apps are not auto-started at boot unless
+  registered as the "default app" with the arduino-app-cli daemon.
+  **Fix**: `arduino-app-cli properties set default <app_path>`.
+  **Rule**: Always register a long-running App Lab app as the default
+  app so it survives reboots. (from ToDo#10)
 - **Problem**: App python crashed with ModuleNotFoundError after
   adding psutil to requirements.txt and running `app restart`.
   **Cause**: arduino-app-cli reuses the cached venv in
