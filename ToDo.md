@@ -331,3 +331,26 @@ instead of main.
   referenced claude_test/ scripts and paths cross-checked. GitHub
   issue #6, branch docs/quickstart-complete, PR #7 (stacked on PR #4
   because the Quick start documents the matrix feature).
+
+## 2026-07-14 — Refactor ha-mcu-bridge main.py into HaMcuBridge class
+
+Requested by user after a visual code review of
+apps/ha-mcu-bridge/python/main.py. The user approved the review plan
+in chat and asked to gather everything under one class ("god class"):
+separate the public surface from internal helpers and fix the
+MIT-convention findings from the review. Behavior must not change.
+
+- [x] Wrap all behavior in a HaMcuBridge class: run() as the only
+      public method; _handle_connect/_handle_message as paho-mqtt
+      callbacks; _build_command_topic/_build_state_topic/_apply_pin/
+      _publish_discovery/_push_stats_forever as internal helpers
+- [x] Absorb module globals (client, bridge_lock) into instance state
+- [x] Add the five missing docstrings; rename noun-shaped functions
+      to verbs (MIT convention)
+- [x] Promote the hardcoded 5 s reconnect delay to RETRY_DELAY_S
+- [x] Fix the two 80-column violations (ruff format, line-length 80)
+- [x] Add main() + __main__ guard after confirming the App Lab
+      runtime executes main.py as a script, not an import
+- [x] Verify on the board: deploy, app restart (see LP §3 venv note),
+      "MQTT connected" in logs, HA switch toggle, matrix bars
+- [x] GitHub issue, branch refactor/bridge-god-class, PR
