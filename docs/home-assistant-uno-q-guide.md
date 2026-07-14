@@ -357,7 +357,9 @@ The UNO Q is dual-brain: HA runs on the Linux side (QRB2210), while the
 header pins and user LEDs belong to the STM32U585 MCU. They are wired
 together by the `arduino-router` service (RPC over
 `/run/arduino-router.sock`). This repo's `apps/ha-mcu-bridge/` App Lab
-app exposes MCU pins to HA as MQTT switches:
+app exposes MCU pins to HA as MQTT switches and, independently of HA,
+renders the Linux side's CPU/memory load as bars on the on-board
+8x13 LED matrix (section 9e):
 
 ```
 HA  <-MQTT->  Mosquitto  <-MQTT->  app python (paho-mqtt)
@@ -441,6 +443,43 @@ Verified result: 6/6 transitions OK, ~1 s command-to-state latency,
 LED visibly blinking. The switches are also on the HA dashboard
 (`http://<BOARD_IP>:8123`) under device "UNO Q MCU".
 
+### 9e. System-load bars on the LED matrix
+
+The same app samples the Linux side's CPU and memory usage with
+`psutil` every 2 s (a daemon thread in `python/main.py`) and pushes
+two integers to the sketch (`Bridge.call("show_load", cpu, mem)`),
+which draws them on the 8x13 matrix:
+
+```
+row 0  .............   (margin)
+row 1  ####.........   CPU bar   (2 rows, 0-13 cols ~ 0-100 %)
+row 2  ####.........
+row 3  .............   (blank separator)
+row 4  #####........   MEM bar   (3 rows)
+row 5  #####........
+row 6  #####........
+row 7  .............   (margin)
+```
+
+Implementation notes:
+
+- `matrixBegin()` / `matrixWrite(const uint32_t[4])` are provided by
+  the base firmware (declared `extern "C"` in the sketch, same as the
+  official weather-forecast example) — no extra library in
+  `sketch.yaml`.
+- Raw frame bit order: pixel `i = row*13 + col` lives at
+  `word[i/32]`, bit `i%32` (row 0 = top, col 0 = left). Determined by
+  decoding the official example icons —
+  `claude_test/decode_matrix_frame.py`.
+- Any nonzero percentage lights at least one LED; 100 % = all 13.
+- If the python side dies, the matrix freezes at the last frame; the
+  sketch clears it on the next app start.
+
+Verified: idle shows a 1-2 col CPU bar and a ~5 col MEM bar (~35 %);
+a 20 s four-core stress (`for i in 1 2 3 4; do timeout 20 yes
+> /dev/null & done`) visibly grows the CPU bar and it shrinks back
+after, while the HA switch path keeps passing 6/6 (section 9d test).
+
 ## 10. Troubleshooting
 
 | Symptom | Cause / Fix |
@@ -461,6 +500,7 @@ LED visibly blinking. The switches are also on the HA dashboard
 | App build fails: `Stat /Data/Local/Tmp` | Happens only when running app-cli over adb: adbd sets `TMPDIR=/data/local/tmp` (Android convention) which doesn't exist on the Debian board. Prefix with `TMPDIR=/tmp`, or just use SSH (step 9c). |
 | Bridge app logs `ConnectionRefusedError` to MQTT | App Lab python runs in a bridged container — host loopback is unreachable. The broker must also listen on 172.17.0.1 (step 9a) and the app must connect there (default in `main.py`, override with `MQTT_HOST`). |
 | MCU entities `unavailable` in HA | The bridge app is stopped (LWT set the availability topic to `offline`). `ssh unoq 'arduino-app-cli app restart /home/arduino/ArduinoApps/ha-mcu-bridge'`. |
+| App python crashes `ModuleNotFoundError` after adding a dependency | `app restart` reuses the cached venv in `<app>/.cache/.venv` and does not react to `requirements.txt` changes. `app stop`, then `rm -rf <app>/.cache/.venv`, then `app start` to reprovision. |
 
 ## 11. File map
 

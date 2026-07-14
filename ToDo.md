@@ -220,3 +220,44 @@ on/off for 3 cycles at 3-second intervals over SSH. (see LP §2, §5)
   < claude_test/toggle_test.sh` -> 6/6 transitions OK at 3 s cadence,
   final state off restored. GitHub issue #1, branch
   docs/wifi-ssh-workflow.
+
+## 2026-07-14 — System-load bars on the UNO Q LED matrix
+
+Requested by user; plan approved in plan mode. Show Linux-side CPU%
+and memory% on the on-board 8x13 LED matrix as horizontal bars (CPU on
+2 rows, one blank row, MEM on 3 rows). Extends apps/ha-mcu-bridge
+(user choice: the MCU runs one sketch at a time, and the HA MQTT
+switches must keep working). Patterns taken from the board-bundled
+examples system-resources-logger (psutil sampling) and
+weather-forecast / air-quality-monitoring (matrixBegin/matrixWrite +
+Bridge RPC). (see LP §3, §5)
+
+- [x] Determine the raw matrixWrite bit order by decoding the official
+      example frames (claude_test decoder script + README row)
+- [x] Sketch: extern matrixBegin/matrixWrite, layout constants,
+      setPixel/barCols helpers, show_load RPC handler, clear on setup
+- [x] Python: psutil==7.0.0 dep, stats_loop daemon thread pushing
+      Bridge.call("show_load", cpu, mem) every 2 s under bridge_lock
+- [x] Deploy over SSH (scp + app restart, reflashes MCU) and verify:
+      logs clean, idle bars visible, 4x yes stress grows the CPU bar,
+      HA switch regression via toggle_test.sh (see LP §3)
+- [x] Update docs (guide §9 + new §9e, README, app.yaml description)
+      and LearnedPatterns (firmware matrix symbols + bit layout)
+
+### Results (2026-07-14)
+
+- Bit order settled WITHOUT hardware trial: decoding the official
+  air-quality "good" icon under both candidate orders
+  (claude_test/decode_matrix_frame.py) renders a clean smiley only
+  for LSB-first — pixel i = row*13+col -> word[i/32] bit i%32. The
+  planned corner-pixel hardware gate became unnecessary.
+- Deploy gotcha: `app restart` reused the cached venv and python
+  crashed with ModuleNotFoundError on psutil; fixed by `app stop`,
+  `rm -rf .cache/.venv`, `app start` (now in guide troubleshooting
+  and LearnedPatterns §3).
+- Verified over SSH + user's eyes: 0 "stats push failed" in logs;
+  idle bars (CPU 1-2 cols, MEM ~5 cols at ~35 %); 4-core `yes`
+  stress (load avg 1.9 -> 3.0) grew and shrank the CPU bar;
+  toggle_test.sh on switch.uno_q_mcu_uno_q_led3_g passed 6/6
+  concurrently; user visually confirmed the layout. GitHub issue #3,
+  branch feature/matrix-sysload.

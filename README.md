@@ -76,6 +76,9 @@ Two consequences that surprise R4 users most:
   switches with automatic discovery (no HA YAML edits). Defaults to the
   six on-board RGB LED channels; header pins are opt-in in
   `python/main.py` `PIN_CONFIG` for safety.
+- The same app renders the Linux side's live CPU/memory load as bars
+  on the on-board 8x13 LED matrix (psutil sampling every 2 s, pushed
+  to the sketch over Bridge RPC; CPU on 2 rows, MEM on 3).
 
 ## Verified results
 
@@ -85,6 +88,7 @@ Two consequences that surprise R4 users most:
 | Tapo registration in HA | Both plugs, full entity sets, live 7.3 W load reading |
 | Tapo relay toggle via HA, 3 s cadence | 6/6 transitions OK, ~1 s latency |
 | MCU LED toggle via HA → MQTT → RPC, 3 s cadence | 6/6 transitions OK, LED visibly blinking |
+| System-load bars on the 8x13 LED matrix | Idle: CPU 1-2 cols, MEM ~5 cols (~35 %); 4-core `yes` stress grows the CPU bar and it shrinks back; HA switches keep passing 6/6 concurrently |
 
 ## Repository layout
 

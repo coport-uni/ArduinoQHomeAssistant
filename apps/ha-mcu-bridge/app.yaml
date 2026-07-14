@@ -1,3 +1,4 @@
 name: HA MCU Bridge
 icon: 🏠
-description: Exposes UNO Q MCU pins to Home Assistant as MQTT switches.
+description: Exposes UNO Q MCU pins to Home Assistant as MQTT switches
+  and shows CPU/memory load bars on the LED matrix.
