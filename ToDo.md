@@ -274,8 +274,60 @@ the user's request. (see LP §1, §3)
       no systemd/cron hack needed
 - [x] Register /home/arduino/ArduinoApps/ha-mcu-bridge as default app
       on the board and confirm with `properties get default`
-- [ ] Verify end-to-end: reboot the board, confirm the app container
+- [x] Verify end-to-end: reboot the board, confirm the app container
       comes up without manual start, MCU entities available, matrix
       bars updating
 - [x] Document in guide step 9c + troubleshooting row; LearnedPatterns
       entry
+
+### Results (2026-07-14)
+
+- `arduino-app-cli properties set default <app_path>` is the supported
+  autostart mechanism (the arduino-app-cli.service daemon starts the
+  default app at boot); `systemctl reboot` over SSH is denied
+  ("Interactive authentication required") so the reboot used the
+  privileged docker helper (LP §1).
+- Reboot verification (user-approved reboot): board back in ~45 s,
+  HA + Mosquitto up ~1 min, ha-mcu-bridge-main-1 auto-started ~90 s
+  after reboot with NO manual start; switch.uno_q_mcu_uno_q_led3_g
+  available, matrix bars updating. Exactly 3 "stats push failed"
+  lines during boot (router not up yet) then 0 — the per-iteration
+  try/except recovered as designed. GitHub issue #5.
+
+## 2026-07-14 — Make the README Quick start self-sufficient
+
+Requested by user. The Quick start's step 1 mentioned "enable SSH +
+install your key (guide steps 1-2)" only in a comment and then jumped
+straight to `ssh unoq` — impossible on a fresh board (sshd ships
+without host keys, no authorized key, no `unoq` alias; see LP §2).
+Steps 4-5 likewise pointed at guide sections without commands. Goal:
+following the Quick start ALONE on a brand-new UNO Q must reproduce
+every verified feature (WiFi+SSH bootstrap, HA, long-lived token,
+Tapo registration, MQTT broker + integration, ha-mcu-bridge app with
+HA LED switches + matrix load bars, end-to-end toggle checks).
+
+Workflow note: stacked on feature/matrix-sysload because PR #4 is
+still open and the Quick start being fixed documents the matrix
+feature; branch docs/quickstart-complete targets feature/matrix-sysload
+instead of main.
+
+- [x] Rewrite README Quick start to be fully executable end-to-end:
+      adb udev fallback, sshd host-key generation + public-key install
+      + `unoq` ssh alias (guide step 2, see LP §2), Tapo MAC discovery
+      (probe_all.py) + per-MAC registration (ha_add_tapo.sh),
+      Mosquitto + MQTT integration + app deploy + boot default app,
+      switch-entity listing, and both toggle verifications
+- [x] GitHub issue, branch docs/quickstart-complete, PR onto
+      feature/matrix-sysload
+
+### Results (2026-07-14)
+
+- Quick start rewritten as seven fully executable steps (USB
+  bootstrap incl. udev fallback -> SSH enablement/key/alias -> HA ->
+  onboarding+token -> Tapo discovery+registration -> broker + MQTT
+  integration + app deploy + boot default -> entity listing + both
+  toggle tests), with the off-state-0 W plug caution. All commands
+  taken verbatim from guide steps verified on hardware 2026-07-13/14;
+  referenced claude_test/ scripts and paths cross-checked. GitHub
+  issue #6, branch docs/quickstart-complete, PR #7 (stacked on PR #4
+  because the Quick start documents the matrix feature).
