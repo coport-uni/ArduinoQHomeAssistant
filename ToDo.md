@@ -220,3 +220,114 @@ on/off for 3 cycles at 3-second intervals over SSH. (see LP §2, §5)
   < claude_test/toggle_test.sh` -> 6/6 transitions OK at 3 s cadence,
   final state off restored. GitHub issue #1, branch
   docs/wifi-ssh-workflow.
+
+## 2026-07-14 — System-load bars on the UNO Q LED matrix
+
+Requested by user; plan approved in plan mode. Show Linux-side CPU%
+and memory% on the on-board 8x13 LED matrix as horizontal bars (CPU on
+2 rows, one blank row, MEM on 3 rows). Extends apps/ha-mcu-bridge
+(user choice: the MCU runs one sketch at a time, and the HA MQTT
+switches must keep working). Patterns taken from the board-bundled
+examples system-resources-logger (psutil sampling) and
+weather-forecast / air-quality-monitoring (matrixBegin/matrixWrite +
+Bridge RPC). (see LP §3, §5)
+
+- [x] Determine the raw matrixWrite bit order by decoding the official
+      example frames (claude_test decoder script + README row)
+- [x] Sketch: extern matrixBegin/matrixWrite, layout constants,
+      setPixel/barCols helpers, show_load RPC handler, clear on setup
+- [x] Python: psutil==7.0.0 dep, stats_loop daemon thread pushing
+      Bridge.call("show_load", cpu, mem) every 2 s under bridge_lock
+- [x] Deploy over SSH (scp + app restart, reflashes MCU) and verify:
+      logs clean, idle bars visible, 4x yes stress grows the CPU bar,
+      HA switch regression via toggle_test.sh (see LP §3)
+- [x] Update docs (guide §9 + new §9e, README, app.yaml description)
+      and LearnedPatterns (firmware matrix symbols + bit layout)
+
+### Results (2026-07-14)
+
+- Bit order settled WITHOUT hardware trial: decoding the official
+  air-quality "good" icon under both candidate orders
+  (claude_test/decode_matrix_frame.py) renders a clean smiley only
+  for LSB-first — pixel i = row*13+col -> word[i/32] bit i%32. The
+  planned corner-pixel hardware gate became unnecessary.
+- Deploy gotcha: `app restart` reused the cached venv and python
+  crashed with ModuleNotFoundError on psutil; fixed by `app stop`,
+  `rm -rf .cache/.venv`, `app start` (now in guide troubleshooting
+  and LearnedPatterns §3).
+- Verified over SSH + user's eyes: 0 "stats push failed" in logs;
+  idle bars (CPU 1-2 cols, MEM ~5 cols at ~35 %); 4-core `yes`
+  stress (load avg 1.9 -> 3.0) grew and shrank the CPU bar;
+  toggle_test.sh on switch.uno_q_mcu_uno_q_led3_g passed 6/6
+  concurrently; user visually confirmed the layout. GitHub issue #3,
+  branch feature/matrix-sysload.
+
+## 2026-07-14 — Auto-start ha-mcu-bridge on boot
+
+Requested by user after a board reboot left the app stopped (HA and
+Mosquitto auto-restart via Docker policies, but App Lab apps do not
+auto-start). Included in the feature/matrix-sysload branch / PR #4 at
+the user's request. (see LP §1, §3)
+
+- [x] Find the supported mechanism: arduino-app-cli daemon starts the
+      "default app" at boot (`properties set default <app_path>`);
+      no systemd/cron hack needed
+- [x] Register /home/arduino/ArduinoApps/ha-mcu-bridge as default app
+      on the board and confirm with `properties get default`
+- [x] Verify end-to-end: reboot the board, confirm the app container
+      comes up without manual start, MCU entities available, matrix
+      bars updating
+- [x] Document in guide step 9c + troubleshooting row; LearnedPatterns
+      entry
+
+### Results (2026-07-14)
+
+- `arduino-app-cli properties set default <app_path>` is the supported
+  autostart mechanism (the arduino-app-cli.service daemon starts the
+  default app at boot); `systemctl reboot` over SSH is denied
+  ("Interactive authentication required") so the reboot used the
+  privileged docker helper (LP §1).
+- Reboot verification (user-approved reboot): board back in ~45 s,
+  HA + Mosquitto up ~1 min, ha-mcu-bridge-main-1 auto-started ~90 s
+  after reboot with NO manual start; switch.uno_q_mcu_uno_q_led3_g
+  available, matrix bars updating. Exactly 3 "stats push failed"
+  lines during boot (router not up yet) then 0 — the per-iteration
+  try/except recovered as designed. GitHub issue #5.
+
+## 2026-07-14 — Make the README Quick start self-sufficient
+
+Requested by user. The Quick start's step 1 mentioned "enable SSH +
+install your key (guide steps 1-2)" only in a comment and then jumped
+straight to `ssh unoq` — impossible on a fresh board (sshd ships
+without host keys, no authorized key, no `unoq` alias; see LP §2).
+Steps 4-5 likewise pointed at guide sections without commands. Goal:
+following the Quick start ALONE on a brand-new UNO Q must reproduce
+every verified feature (WiFi+SSH bootstrap, HA, long-lived token,
+Tapo registration, MQTT broker + integration, ha-mcu-bridge app with
+HA LED switches + matrix load bars, end-to-end toggle checks).
+
+Workflow note: stacked on feature/matrix-sysload because PR #4 is
+still open and the Quick start being fixed documents the matrix
+feature; branch docs/quickstart-complete targets feature/matrix-sysload
+instead of main.
+
+- [x] Rewrite README Quick start to be fully executable end-to-end:
+      adb udev fallback, sshd host-key generation + public-key install
+      + `unoq` ssh alias (guide step 2, see LP §2), Tapo MAC discovery
+      (probe_all.py) + per-MAC registration (ha_add_tapo.sh),
+      Mosquitto + MQTT integration + app deploy + boot default app,
+      switch-entity listing, and both toggle verifications
+- [x] GitHub issue, branch docs/quickstart-complete, PR onto
+      feature/matrix-sysload
+
+### Results (2026-07-14)
+
+- Quick start rewritten as seven fully executable steps (USB
+  bootstrap incl. udev fallback -> SSH enablement/key/alias -> HA ->
+  onboarding+token -> Tapo discovery+registration -> broker + MQTT
+  integration + app deploy + boot default -> entity listing + both
+  toggle tests), with the off-state-0 W plug caution. All commands
+  taken verbatim from guide steps verified on hardware 2026-07-13/14;
+  referenced claude_test/ scripts and paths cross-checked. GitHub
+  issue #6, branch docs/quickstart-complete, PR #7 (stacked on PR #4
+  because the Quick start documents the matrix feature).

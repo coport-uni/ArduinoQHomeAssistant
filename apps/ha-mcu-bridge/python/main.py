@@ -4,6 +4,10 @@ Publishes one MQTT switch per entry in PIN_CONFIG. Commands received
 over MQTT are forwarded to the MCU sketch through the Arduino router
 Bridge RPC (set_pin_by_name). States are echoed back on retained
 state topics so Home Assistant stays in sync.
+
+A daemon thread also samples the Linux-side CPU and memory usage and
+pushes them to the sketch (show_load RPC), which renders them as
+horizontal bars on the on-board 8x13 LED matrix.
 """
 
 import json
@@ -12,6 +16,7 @@ import threading
 import time
 
 import paho.mqtt.client as mqtt
+import psutil
 from arduino.app_utils import App, Bridge
 
 # App Lab apps run in bridged Docker containers, so host loopback is
@@ -21,6 +26,9 @@ MQTT_PORT = 1883
 DISCOVERY_PREFIX = "homeassistant"
 BASE_TOPIC = "unoq"
 AVAILABILITY_TOPIC = f"{BASE_TOPIC}/bridge/availability"
+
+# LED matrix load display: push interval for the show_load RPC.
+UPDATE_INTERVAL_S = 2.0
 
 # Pins exposed to Home Assistant. The RGB user LEDs are safe defaults
 # (nothing external is wired to them); header pins D2-D13 are
@@ -53,6 +61,28 @@ def apply_pin(name, logical_on):
     hw_state = (not logical_on) if PIN_CONFIG[name]["active_low"] else logical_on
     with bridge_lock:
         Bridge.call("set_pin_by_name", name, hw_state)
+
+
+def stats_loop():
+    """Push CPU/memory percent to the MCU LED matrix forever.
+
+    Runs as a daemon thread next to the MQTT loop. Every iteration is
+    wrapped in try/except so a Bridge or psutil hiccup only skips one
+    frame and can never take down the MQTT switch side.
+    """
+    # The first cpu_percent(None) call only primes psutil's internal
+    # counters and returns a meaningless 0.0 -- discard it.
+    psutil.cpu_percent(interval=None)
+    time.sleep(UPDATE_INTERVAL_S)
+    while True:
+        try:
+            cpu = round(psutil.cpu_percent(interval=None))
+            mem = round(psutil.virtual_memory().percent)
+            with bridge_lock:
+                Bridge.call("show_load", cpu, mem)
+        except Exception as e:
+            print(f"stats push failed: {e}", flush=True)
+        time.sleep(UPDATE_INTERVAL_S)
 
 
 def publish_discovery(client):
@@ -120,5 +150,7 @@ while True:
         )
         time.sleep(5)
 client.loop_start()
+
+threading.Thread(target=stats_loop, daemon=True).start()
 
 App.run()

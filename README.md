@@ -76,6 +76,9 @@ Two consequences that surprise R4 users most:
   switches with automatic discovery (no HA YAML edits). Defaults to the
   six on-board RGB LED channels; header pins are opt-in in
   `python/main.py` `PIN_CONFIG` for safety.
+- The same app renders the Linux side's live CPU/memory load as bars
+  on the on-board 8x13 LED matrix (psutil sampling every 2 s, pushed
+  to the sketch over Bridge RPC; CPU on 2 rows, MEM on 3).
 
 ## Verified results
 
@@ -85,6 +88,7 @@ Two consequences that surprise R4 users most:
 | Tapo registration in HA | Both plugs, full entity sets, live 7.3 W load reading |
 | Tapo relay toggle via HA, 3 s cadence | 6/6 transitions OK, ~1 s latency |
 | MCU LED toggle via HA → MQTT → RPC, 3 s cadence | 6/6 transitions OK, LED visibly blinking |
+| System-load bars on the 8x13 LED matrix | Idle: CPU 1-2 cols, MEM ~5 cols (~35 %); 4-core `yes` stress grows the CPU bar and it shrinks back; HA switches keep passing 6/6 concurrently |
 
 ## Repository layout
 
@@ -106,36 +110,96 @@ git clone --recurse-submodules https://github.com/coport-uni/ArduinoQTest.git
 
 ## Quick start (another UNO Q board)
 
-Condensed from the main guide — read it for details and expected output:
+Condensed from the main guide, but complete: every command a brand-new
+board needs is below — read the guide for expected output and
+troubleshooting. Prerequisites: a Linux host with `adb`/`ssh`/`scp`,
+a 2.4 GHz WiFi network, and Tapo plugs already paired to that same
+network via the Tapo app.
 
 ```bash
-# 1. One-time bootstrap over USB: fix ADB permissions if needed, join
-#    WiFi, enable SSH + install your key (guide steps 1-2). Then add a
-#    `unoq` alias to ~/.ssh/config and unplug the cable.
+# 1. One-time USB bootstrap: check ADB, join WiFi, note the board IP.
 adb devices -l
+# Only if it prints "no permissions": add a udev rule once, retry.
+echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="2341", MODE="0666", GROUP="plugdev"' \
+  | sudo tee /etc/udev/rules.d/51-arduino-unoq.rules
+sudo udevadm control --reload-rules && sudo udevadm trigger
+adb kill-server && adb devices
 adb shell 'nmcli device wifi connect "<SSID>" password "<PW>"'
-ssh unoq hostname   # from here on, WiFi only
+adb shell 'ip -4 addr show wlan0 | grep inet'   # note <BOARD_IP>
 
-# 2. Home Assistant
+# 2. Enable SSH and install your public key (run ssh-keygen -t
+#    ed25519 first if you have no key). Fresh images ship sshd
+#    WITHOUT host keys, so SSH is refused until they are generated;
+#    root access uses the privileged-helper trick since `arduino`
+#    has no passwordless sudo. Then unplug USB — WiFi only from here.
+adb shell "docker run --rm --privileged --pid=host python:3.12-alpine \
+  nsenter -t 1 -m -u -i -n -p -- \
+  sh -c 'ssh-keygen -A && systemctl restart ssh'"
+PUB=$(cat ~/.ssh/id_ed25519.pub)
+adb shell "mkdir -p ~/.ssh && chmod 700 ~/.ssh \
+  && echo '$PUB' >> ~/.ssh/authorized_keys \
+  && chmod 600 ~/.ssh/authorized_keys"
+printf 'Host unoq\n  HostName <BOARD_IP>\n  User arduino\n  Port 22\n' \
+  >> ~/.ssh/config
+ssh unoq hostname   # prints the board hostname, no password prompt
+
+# 3. Home Assistant (image pull takes minutes; first boot 1-2 min)
 ssh unoq 'mkdir -p /home/arduino/homeassistant && docker run -d \
   --name homeassistant --restart=unless-stopped --privileged \
   -e TZ=Asia/Seoul -v /home/arduino/homeassistant:/config \
   -v /run/dbus:/run/dbus:ro --network=host \
   ghcr.io/home-assistant/home-assistant:stable'
 
-# 3. Onboard + long-lived token (scripts from claude_test/)
+# 4. Onboard + long-lived token (scripts from claude_test/)
 scp claude_test/{ha_onboard.sh,ha_login.sh} unoq:/home/arduino/
 scp claude_test/mint_ll.py unoq:/tmp/
 ssh unoq 'HA_USER=arduino HA_PASS=<pw> bash /home/arduino/ha_onboard.sh'
 ssh unoq 'HA_PASS=<pw> bash /home/arduino/ha_login.sh'
 
-# 4. Tapo plugs: verify → register (guide steps 5 and 7)
+# 5. Tapo plugs: find their MACs on your /24 (replace 192.168.1),
+#    then register each one. KLAP auth needs your TP-Link account
+#    email+password in EXACT case; detection alone does not.
+scp claude_test/probe_all.py unoq:/tmp/
+ssh unoq 'docker run --rm --network=host \
+  -v /tmp/probe_all.py:/probe.py python:3.12-alpine \
+  sh -c "pip install -q python-kasa && python /probe.py 192.168.1"'
+scp claude_test/ha_add_tapo.sh unoq:/home/arduino/
+ssh unoq 'TAPO_USER=<email> TAPO_PASS=<pw> \
+  bash /home/arduino/ha_add_tapo.sh <PLUG_MAC>'   # repeat per plug
 
-# 5. MCU bridge: broker + MQTT integration + app (guide step 9)
+# 6. MCU bridge: Mosquitto broker + HA MQTT integration + App Lab
+#    app. First build+flash takes a few minutes (Zephyr core, SWD);
+#    the "default" property makes the app auto-start after reboots.
+ssh unoq 'mkdir -p /home/arduino/mosquitto'
+scp apps/mosquitto/mosquitto.conf unoq:/home/arduino/mosquitto/
+ssh unoq 'docker run -d --name mosquitto --restart=unless-stopped \
+  --network=host -v /home/arduino/mosquitto:/mosquitto/config \
+  eclipse-mosquitto:2'
+scp claude_test/ha_add_mqtt.sh unoq:/home/arduino/
+ssh unoq 'bash /home/arduino/ha_add_mqtt.sh'
 scp -r apps/ha-mcu-bridge unoq:/home/arduino/ArduinoApps/
 ssh unoq 'arduino-app-cli app start \
   /home/arduino/ArduinoApps/ha-mcu-bridge'
+ssh unoq 'arduino-app-cli properties set default \
+  /home/arduino/ArduinoApps/ha-mcu-bridge'
+
+# 7. Verify: list the switch entities HA created, then toggle a plug
+#    and an MCU LED end-to-end. The LED matrix should already be
+#    showing the CPU (2 rows) / MEM (3 rows) load bars.
+ssh unoq 'curl -s http://localhost:8123/api/states \
+  -H "Authorization: Bearer $(cat /home/arduino/.ha_token)" \
+  | python3 -c "import sys,json
+for e in json.load(sys.stdin):
+    if e[\"entity_id\"].startswith(\"switch.\"): print(e[\"entity_id\"])"'
+ssh unoq 'bash -s -- switch.<plug_entity> 3' \
+  < claude_test/toggle_test.sh
+ssh unoq 'bash -s -- switch.uno_q_mcu_uno_q_led3_g 3' \
+  < claude_test/toggle_test.sh
 ```
+
+CAUTION for step 7: toggling a plug power-cycles whatever is plugged
+into it, and a plug whose relay is off always reports 0 W even with a
+load attached — make sure the socket is safe to cycle (guide step 8).
 
 ## Gotchas discovered on real hardware
 

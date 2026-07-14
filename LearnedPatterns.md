@@ -68,6 +68,30 @@ detection, #2 reproducibility guide, #3 WiFi + VS Code Remote-SSH,
   **Cause**: No aiohttp installed system-wide. **Fix**: Run them inside
   the HA container. **Rule**: Always run HA WebSocket tooling inside the
   `homeassistant` container. (from ToDo#4)
+- **Problem**: After a board reboot, HA and Mosquitto came back but
+  the App Lab app stayed stopped (MCU entities unavailable, matrix
+  dark). **Cause**: App Lab apps are not auto-started at boot unless
+  registered as the "default app" with the arduino-app-cli daemon.
+  **Fix**: `arduino-app-cli properties set default <app_path>`.
+  **Rule**: Always register a long-running App Lab app as the default
+  app so it survives reboots. (from ToDo#10)
+- **Problem**: App python crashed with ModuleNotFoundError after
+  adding psutil to requirements.txt and running `app restart`.
+  **Cause**: arduino-app-cli reuses the cached venv in
+  `<app>/.cache/.venv` and does not reinstall on requirements
+  changes. **Fix**: `app stop`, `rm -rf <app>/.cache/.venv`,
+  `app start`. **Rule**: Always wipe the app's `.cache/.venv` after
+  changing requirements.txt. (from ToDo#9)
+- **Problem**: Driving the UNO Q 8x13 LED matrix seemed to need a
+  library and the raw frame bit order was undocumented. **Cause**:
+  `matrixBegin()`/`matrixWrite(uint32_t[4])` are exported by the base
+  firmware (variant syms-dynamic.ld) and official examples call them
+  via bare `extern "C"` declarations. **Fix**: Decoded the official
+  air-quality icon frames both ways
+  (claude_test/decode_matrix_frame.py): pixel `i = row*13 + col` ->
+  `word[i/32]`, bit `i%32`, row 0 top, col 0 left. **Rule**: Always
+  determine undocumented frame formats by decoding known-good example
+  assets before resorting to on-hardware trial. (from ToDo#9)
 
 ## §4. Workflow Lessons
 
