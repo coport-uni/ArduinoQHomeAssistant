@@ -1,0 +1,82 @@
+menu "Home Assistant client"
+
+config HA_CLIENT_WIFI_SSID
+    string "WiFi SSID"
+    default ""
+    help
+        WPA2-Personal SSID. Leave empty to skip WiFi bring-up; the
+        screen will show a "configure WiFi" message.
+
+config HA_CLIENT_WIFI_PASSWORD
+    string "WiFi password"
+    default ""
+    help
+        WPA2-Personal passphrase. Stored in the local sdkconfig only,
+        which is gitignored.
+
+config HA_CLIENT_SERVER_URL
+    string "Home Assistant base URL"
+    default "http://192.168.1.232:8123"
+    help
+        Base URL of the Home Assistant server. Include scheme and port;
+        a trailing slash is optional. Plain HTTP on the LAN — HTTPS
+        would need a cert bundle and is not configured.
+
+config HA_CLIENT_TOKEN
+    string "Long-lived access token"
+    default ""
+    help
+        Home Assistant long-lived access token. The REST API does NOT
+        accept a username/password — those only log into the web UI.
+
+        To create one: log into the web UI, click your user name at the
+        bottom-left, open the Security tab, scroll to "Long-lived access
+        tokens", and press "Create token". The token is shown once and
+        cannot be retrieved afterwards.
+
+        Default lifespan is 10 years, so no refresh logic is needed.
+
+config HA_CLIENT_POLL_INTERVAL_S
+    int "Poll interval (seconds)"
+    default 10
+    range 2 600
+    help
+        How often to re-render the entity template and refresh the
+        screen. One template render is cheap (~2 KB response), so this
+        can be far shorter than a per-device polling API would allow.
+        Button presses are handled immediately regardless of this value.
+
+config HA_CLIENT_LABEL
+    string "Home Assistant label to show"
+    default "box3"
+    help
+        Only entities carrying this label are shown. Create the label in
+        Home Assistant (Settings > Areas & labels > Labels), then add it
+        to each entity you want on the screen.
+
+        Nothing about the selection lives in this firmware, so labelling
+        one more entity makes it appear within one poll — no reflash.
+
+        A label is used rather than a domain sweep because Home Assistant
+        exposes no way to tell a real device from an integration's own
+        config entities: switch.plug_led and switch.plug_auto_off_enabled
+        sit in the same domain and area as switch.plug, with no
+        device_class and no entity_category visible to the template API.
+        A domain sweep puts all of them on screen; the label puts exactly
+        what you picked.
+
+        Supported domains: light, switch (toggle rows) and sensor
+        (read-only rows). Labelling an entity of any other domain is
+        harmless — it is skipped with a log line.
+
+config HA_CLIENT_MAX_ENTITIES
+    int "Max labelled entities"
+    default 16
+    range 1 32
+    help
+        Upper bound on labelled entities kept and shown. Also caps the
+        rendered template so the response cannot overflow the device's
+        buffer. Entities beyond the cap are dropped with a warning in
+        the log rather than silently.
+
+endmenu

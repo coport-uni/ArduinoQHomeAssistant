@@ -1,0 +1,5 @@
+dependencies:
+  espressif/esp-box-3: "^3.0.1"
+  espressif/cjson: "^1.7.18"
+  idf:
+    version: ">=5.3"
