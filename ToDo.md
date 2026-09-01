@@ -654,3 +654,82 @@ phone-side steps wait on the user replacing the cable; code stages
   loads with debugging on); the full gate still needs one real
   remote command observed by the user. Screenshot kept off-repo
   (board ~/u2test.png) — car/account privacy.
+
+## 2026-09-01 — myhyundai_aircon PR 1: skeleton + adb_client +
+## config flow (spec §11 stages 1-2)
+
+Requested by user ("머지 후 해줘" after PR #16 merged). First code
+PR of the confirmed 4-PR plan: component skeleton under root
+custom_components/myhyundai_aircon/, async ADB client on
+adb-shell[async]==0.4.4 (the HA 2026.2.3 pin), and the Config Flow
+that validates the connection and auto-saves the screen resolution
+(preferring the Override size per stage-0 finding). Options flow is
+deferred to the guards PR where its values are consumed. Unit tests
+run on the board in /home/arduino/ha_test_venv; live verification =
+deploy to /home/arduino/ha_config/custom_components/, restart HA,
+drive the config flow over the REST API against the phone at
+192.168.31.113:5555 reusing the already-authorized
+/home/arduino/.android/adbkey. (see LP §3, §5)
+
+- [x] Verify adb-shell 0.4.4 async API signatures against the
+      installed package on the board before coding (§7 rule)
+- [x] Skeleton: manifest.json (requirements pin), const.py,
+      __init__.py (setup/unload with coordinator), coordinator.py
+      (connectivity poll + backoff), strings.json, translations
+      en/ko
+- [x] adb_client.py: keygen-if-missing, connect with RSA signer,
+      shell, close, error mapping (cannot_connect / auth_rejected /
+      invalid_device), serial + wm-size probes
+- [x] config_flow.py: user step, unique_id = device serial,
+      baseline_screen auto-save (Override preferred)
+- [x] Unit tests (tests/ + conftest) green in ha_test_venv on the
+      board; ruff clean at line-length 80 — 12 passed in 2.53 s
+- [x] Deploy to the board, restart home-assistant.service, create
+      the config entry via REST config-flow API, confirm
+      baseline_screen 840x2289 stored and entry loaded — done after
+      the user approved a password reset (see results update)
+- [x] Record results below
+
+### Results (2026-09-01, PR 1)
+
+- adb-shell 0.4.4 API confirmed from the installed source:
+  AdbDeviceTcpAsync(host, port, default_transport_timeout_s),
+  connect(rsa_keys=[signer], auth_timeout_s), shell(cmd,
+  read_timeout_s, timeout_s), close(), keygen(path),
+  PythonRSASigner.FromRSAKeyPath(path), and the exception set used
+  for error mapping.
+- Component skeleton written under root custom_components/
+  myhyundai_aircon/ (manifest pins adb-shell[async]==0.4.4,
+  version 0.1.0). Coordinator polls connectivity every 30 s and
+  walks the 5/15/45/60 s backoff ladder while disconnected.
+  parse_screen_size prefers the Override resolution (stage-0
+  finding: screencaps use 840x2289, not the physical 832x2268).
+- Tests: tests/{conftest,test_adb_client,test_config_flow}.py with
+  phacc; pyproject gained [tool.pytest.ini_options] asyncio_mode=
+  auto + pythonpath=["."] (without pythonpath, custom_components
+  is not importable from the tests). 12/12 green on the board.
+- Deploy gotcha: `cp -r src/myhyundai_aircon dest/custom_components/`
+  when custom_components does not yet exist copies src AS
+  custom_components (rename semantics); ended up with the module
+  spilled at the top level once — cleaned and re-copied properly.
+- HA restarted and DISCOVERED the integration (loader warning
+  logged). Live config-entry creation over REST is blocked: the
+  stored ~/.ha_token (Jul 20) returns 401 — this venv install was
+  reset mid-July and its admin password is neither arduino nor the
+  onboarding default changeme. Two password guesses only, then
+  stopped; need the real password from the user (or approval to
+  reset it offline via `hass --script auth`).
+- GitHub issue #17, branch feature/myhyundai-skeleton.
+- Update (same day): the user could not recall the HA password and
+  approved a reset. `hass --script auth list` showed the single
+  user `arduino`; HA stopped, `change_password arduino arduino`
+  (board-convention value, user advised to change it in the UI),
+  HA restarted. Fresh 10-year long-lived token minted over the
+  websocket API (client unoq-cli) into ~/.ha_token (API check 200).
+  Config flow driven over REST: create_entry with state "loaded"
+  on the first try. Stored entry verified in core.config_entries:
+  unique_id R3CR80H1GBN (phone serial), baseline_screen 840x2289
+  (Override preferred, as designed), host 192.168.31.113:5555,
+  adbkey /home/arduino/.android/adbkey. HA auto-installed
+  adb-shell[async]==0.4.4 into ha_venv from the manifest pin.
+  Spec §11 stages 1-2 completion criteria fully met.

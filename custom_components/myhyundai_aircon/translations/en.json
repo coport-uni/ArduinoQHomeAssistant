@@ -1,0 +1,24 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to the Android device",
+        "description": "The dedicated Android device must be on the same network with ADB over TCP enabled (adb tcpip 5555).",
+        "data": {
+          "host": "Device IP address",
+          "port": "ADB TCP port",
+          "adbkey_path": "ADB key path (empty to auto-generate)",
+          "device_name": "Entity name prefix"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "TCP connection failed. Check the IP address and that 'adb tcpip 5555' has been run since the last device reboot.",
+      "auth_rejected": "The device rejected the connection. Accept the USB debugging authorization dialog on the device screen and try again.",
+      "invalid_device": "The device answered, but not like the expected Android device. Check that the address points at the dedicated phone."
+    },
+    "abort": {
+      "already_configured": "This Android device is already configured."
+    }
+  }
+}
