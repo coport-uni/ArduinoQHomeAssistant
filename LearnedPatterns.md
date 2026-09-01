@@ -113,6 +113,15 @@ detection, #2 reproducibility guide, #3 WiFi + VS Code Remote-SSH,
   `requires_dist` homeassistant pin, never by "latest".
   (from ToDo#17)
 
+- **Problem**: A script streamed over `ssh 'bash -s' < script.sh`
+  silently stopped after its first adb command (no output, exit 0).
+  **Cause**: `adb shell` reads stdin for interactive passthrough
+  and consumed the rest of the script that bash had not read yet.
+  **Fix**: scp the script to the board and run it from a file (or
+  redirect each adb call's stdin from /dev/null). **Rule**: Never
+  stream a script over ssh stdin if it invokes adb (or any
+  stdin-reading command); copy it to a file first. (from ToDo#21)
+
 ## §4. Workflow Lessons
 
 - **Problem**: CLAUDE.md §4 requires GitHub issue/branch/PR but the repo
