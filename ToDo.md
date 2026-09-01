@@ -1003,3 +1003,67 @@ translations already shipped with the code PRs.
 - Spec §11 is now complete: stages 1-9 all delivered and the whole
   stack verified on the real vehicle. Project remains at 0.1.0
   until U6/U8 are observed in the wild.
+
+## 2026-09-01 — Tapo P110M plugs on the venv HA + top-3 HACS themes
+
+Requested by user. Two parts: (a) discover the TP-Link Tapo P110M
+plugs on this network (192.168.31.x — DormTapo1/2 were seen at
+.19/.240 by the 2026-07-27 session on the other board) and register
+them in the SungwooQ venv HA 2026.2.3; KLAP registration will need
+the user's TP-Link account credentials (never stored in this repo).
+(b) survey the currently popular HACS themes and summarize the top
+three. (see LP §3: python-kasa unicast probe, WebSocket flow
+inspection; ha_add_tapo.sh in claude_test/)
+
+- [x] Probe the /24 for Tapo plugs (claude_test/probe_all.py) and
+      check HA's tplink discovery flows — both P110M(KR) found:
+      192.168.31.19 (18:69:45:71:0C:49) and 192.168.31.240
+      (18:69:45:71:05:EC), same as the 2026-07-27 records; HA's
+      only pending discovery flow is the MiWiFi router (upnp)
+- [x] BLOCKED on user: register both plugs — KLAP needs the
+      TP-Link account credentials (verify with python-kasa first
+      per LP §2; never stored in the repo) — user provided them in
+      chat; verified against .19 with the kasa CLI, then both
+      registered via ha_add_tapo.sh (DormTapo1 P110M and DormTapo2
+      P110M create_entry; the second flow reused HA's stored
+      credentials and skipped the auth step)
+- [x] Verify entities + a safe toggle test on one plug — 32 tapo
+      entities incl. current_consumption sensors (0.4 W / 1.7 W,
+      safe); toggle_test.sh on switch.dormtapo1 6/6 OK at 3 s
+      cadence; plug restored to its initial ON state afterwards.
+      Gotcha repeat: the script streamed from this Windows
+      checkout needed CRLF stripping (sed on the fly) — LP §5
+      pattern, ssh-stream variant
+- [x] Research and summarize the top-3 HACS themes — by GitHub
+      hacs-theme topic stars + community citations: ① Frosted
+      Glass (wessamlauf, ~988★, glassmorphism) ② Graphite
+      (TilmanGriesel, ~455★, calm auto light/dark) ③ Catppuccin
+      (4 pastel flavors; already proven on the other rig as
+      default Mocha). Runner-up: Material You / Material Design 3
+      (Nerwyn, ~466★). Full comparison delivered in chat;
+      background in docs/ha-dashboard-research.md (other session's
+      uncommitted file, untouched)
+- [x] Apply the user-chosen Graphite theme (added mid-task): theme
+      yamls (dark/light/auto) downloaded into ha_config/themes/,
+      `frontend: themes: !include_dir_merge_named themes` appended
+      to configuration.yaml (single-file backup kept as
+      configuration.yaml.bak-20260901), config validated with
+      `hass --script check_config`, HA restarted, default theme
+      set to "Graphite Auto" via frontend.set_theme — verified
+      over the websocket API (3 themes loaded, default confirmed);
+      Tapo (32) and myhyundai (5) entities all alive post-restart
+- [x] Record results below
+
+### Results (2026-09-01)
+
+- Plugs: DormTapo1 (192.168.31.19) and DormTapo2 (192.168.31.240)
+  registered in the venv HA with full entity sets incl. energy
+  sensors; end-to-end toggle verified 6/6 and initial state
+  restored.
+- Theme: Graphite (TilmanGriesel) installed manually (no HACS on
+  this HA — same OAuth-interactive limitation as the 2026-07-27
+  rig); "Graphite Auto" is the backend default so it follows
+  light/dark automatically for all users.
+- Theme survey delivered in chat: ① Frosted Glass (~988★)
+  ② Graphite (~455★, chosen) ③ Catppuccin, runner-up Material
+  You (~466★).
