@@ -684,11 +684,10 @@ drive the config flow over the REST API against the phone at
       baseline_screen auto-save (Override preferred)
 - [x] Unit tests (tests/ + conftest) green in ha_test_venv on the
       board; ruff clean at line-length 80 — 12 passed in 2.53 s
-- [ ] Deploy to the board, restart home-assistant.service, create
+- [x] Deploy to the board, restart home-assistant.service, create
       the config entry via REST config-flow API, confirm
-      baseline_screen 840x2289 stored and entry loaded — deploy and
-      integration discovery DONE; entry creation BLOCKED on the HA
-      admin password (see results)
+      baseline_screen 840x2289 stored and entry loaded — done after
+      the user approved a password reset (see results update)
 - [x] Record results below
 
 ### Results (2026-09-01, PR 1)
@@ -721,3 +720,16 @@ drive the config flow over the REST API against the phone at
   stopped; need the real password from the user (or approval to
   reset it offline via `hass --script auth`).
 - GitHub issue #17, branch feature/myhyundai-skeleton.
+- Update (same day): the user could not recall the HA password and
+  approved a reset. `hass --script auth list` showed the single
+  user `arduino`; HA stopped, `change_password arduino arduino`
+  (board-convention value, user advised to change it in the UI),
+  HA restarted. Fresh 10-year long-lived token minted over the
+  websocket API (client unoq-cli) into ~/.ha_token (API check 200).
+  Config flow driven over REST: create_entry with state "loaded"
+  on the first try. Stored entry verified in core.config_entries:
+  unique_id R3CR80H1GBN (phone serial), baseline_screen 840x2289
+  (Override preferred, as designed), host 192.168.31.113:5555,
+  adbkey /home/arduino/.android/adbkey. HA auto-installed
+  adb-shell[async]==0.4.4 into ha_venv from the manifest pin.
+  Spec §11 stages 1-2 completion criteria fully met.
