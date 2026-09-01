@@ -1,3 +1,9 @@
 # Repo-wide Ruff configuration required by CommonClaude CLAUDE.md §6.
 [tool.ruff]
 line-length = 80
+
+# pytest-homeassistant-custom-component requires auto asyncio mode.
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests"]

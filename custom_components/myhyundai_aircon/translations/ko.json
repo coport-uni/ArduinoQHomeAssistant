@@ -1,0 +1,24 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "안드로이드 기기 연결",
+        "description": "전용 안드로이드 기기가 같은 네트워크에 있고 ADB TCP가 켜져 있어야 합니다 (adb tcpip 5555).",
+        "data": {
+          "host": "기기 IP 주소",
+          "port": "ADB TCP 포트",
+          "adbkey_path": "ADB 키 경로 (비우면 자동 생성)",
+          "device_name": "엔티티 이름 접두사"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "TCP 연결에 실패했습니다. IP 주소와 기기 재부팅 후 'adb tcpip 5555' 실행 여부를 확인하세요.",
+      "auth_rejected": "기기가 연결을 거부했습니다. 기기 화면의 USB 디버깅 허용 대화상자를 승인한 뒤 다시 시도하세요.",
+      "invalid_device": "기기가 응답했지만 예상한 안드로이드 기기가 아닙니다. 주소가 전용 폰을 가리키는지 확인하세요."
+    },
+    "abort": {
+      "already_configured": "이 안드로이드 기기는 이미 등록되어 있습니다."
+    }
+  }
+}
