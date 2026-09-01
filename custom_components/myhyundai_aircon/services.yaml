@@ -1,0 +1,42 @@
+capture_dump:
+  name: Capture UI dump
+  description: >-
+    Save the current UI hierarchy (XML) and a screenshot (PNG) of the
+    Android device into config/myhyundai_aircon_dumps/. The core tool
+    for writing recipes and analyzing failures.
+  fields:
+    label:
+      name: Label
+      description: Identifier appended to the dump file names.
+      required: false
+      example: widget
+      selector:
+        text:
+
+run_sequence:
+  name: Run sequence
+  description: >-
+    Run an arbitrary sequence defined in the recipe, bypassing the
+    switch entity.
+  fields:
+    sequence:
+      name: Sequence
+      description: Sequence key inside the recipe file.
+      required: true
+      example: aircon_on
+      selector:
+        text:
+    ignore_guards:
+      name: Ignore guards
+      description: >-
+        Skip the safety guards (reserved; guards arrive in a later
+        stage).
+      required: false
+      default: false
+      selector:
+        boolean:
+
+reload_recipe:
+  name: Reload recipe
+  description: >-
+    Re-read the recipe JSON file without restarting Home Assistant.

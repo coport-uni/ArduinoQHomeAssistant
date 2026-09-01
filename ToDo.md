@@ -733,3 +733,68 @@ drive the config flow over the REST API against the phone at
   adbkey /home/arduino/.android/adbkey. HA auto-installed
   adb-shell[async]==0.4.4 into ha_venv from the manifest pin.
   Spec §11 stages 1-2 completion criteria fully met.
+
+## 2026-09-01 — myhyundai_aircon PR 2: capture_dump + recipe engine
+## (spec §11 stages 3-4)
+
+Requested by user ("머지 후 진행해줘" after PR #18 merged). Second
+code PR of the plan: the capture_dump service (UI-hierarchy XML via
+uiautomator dump + screenshot via screencap/pull, saved under
+config/myhyundai_aircon_dumps/ with a retention cap and a
+persistent notification), recipe.py (JSON load, voluptuous schema
+validation, placeholder detection, login_markers), executor.py
+(all §8.3 step actions except await_notification which stays for
+the notification PR; §8.4 node matching; bounds parsing; login-
+marker session check), recipes/default.json placeholder draft, and
+minimal run_sequence + reload_recipe services (run_sequence
+serialized by a lock and firing the §9.4 result event; guards
+arrive in PR 3). Unit tests on the board venv; live check =
+capture_dump against the real phone. (see LP §3, §5)
+
+- [x] recipe.py + recipes/default.json: schema validation, unknown
+      action/missing field detection, placeholder scan, login
+      markers
+- [x] executor.py: UI dump parse + §8.4 matcher + bounds/center
+      math + step actions (keyevent, wake, home, launch_app,
+      stop_app, wait_focus, wait_node, tap_node, tap_ratio, swipe,
+      sleep, assert_screen), optional-step semantics,
+      E_SESSION_EXPIRED via login markers
+- [x] capture_dump service + dump retention; run_sequence (lock +
+      E_COOLDOWN on concurrent call + result event) and
+      reload_recipe services; services.yaml + translations
+- [x] Unit tests green on the board venv; ruff clean — 30 passed
+      (12 from PR 1 + 18 new) in 3.36 s
+- [x] Live verify: capture_dump on the real phone saves XML + PNG
+      pair; reload_recipe works; run_sequence on the incomplete
+      default recipe returns E_RECIPE_INCOMPLETE
+- [x] Record results below
+
+### Results (2026-09-01, PR 2)
+
+- recipe.py validates against per-action voluptuous schemas (§8.3
+  table), rejects shell-hostile package names and keyevent names by
+  regex, recursively flags _PLACEHOLDER strings per sequence, and
+  carries login_markers. The shipped recipes/default.json is the
+  spec §8.5 draft verbatim plus a placeholder login marker.
+- executor.py implements every §8.3 action except
+  await_notification (raises E_NOT_IMPLEMENTED until the
+  notification stage). §8.4 matching is AND-semantics with
+  text_contains substring support, index pick, multi-match warning.
+  E_SESSION_EXPIRED is checked on every UI dump against
+  login_markers. run_sequence is serialized by an asyncio.Lock; a
+  concurrent call gets E_COOLDOWN immediately (§10.1).
+- Services registered from async_setup_entry: capture_dump (XML via
+  uiautomator dump + PNG via screencap/adb pull, 40-file retention
+  prune, persistent notification), run_sequence (fires the §9.4
+  myhyundai_aircon_result event on success AND failure),
+  reload_recipe.
+- Board venv tests: 30/30 green. ruff check + format clean.
+- Live on the real phone: capture_dump saved
+  20260901-034112-widget.{xml,png} (real uiautomator hierarchy;
+  screen was off so systemui was captured — mechanism verified),
+  reload_recipe returned 200, run_sequence aircon_on failed exactly
+  as designed with E_RECIPE_INCOMPLETE (spec test T9 behavior).
+  Note: right after HA restart the REST service calls briefly
+  returned 400 because the entry had not finished loading —
+  retrying after load succeeded.
+- GitHub issue #19, branch feature/myhyundai-recipe-engine.

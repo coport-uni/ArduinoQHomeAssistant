@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "baseline_screen": "AUTO",
+  "package": "com.hyundai.oneapp.kr",
+  "login_markers": ["LOGIN_MARKER_PLACEHOLDER"],
+  "sequences": {
+    "aircon_on": {
+      "description": "홈 화면 위젯 시동 공조 실행",
+      "steps": [
+        { "action": "assert_screen" },
+        { "action": "wake" },
+        { "action": "home" },
+        { "action": "wait_focus", "pattern": "Launcher", "timeout": 5 },
+        {
+          "action": "tap_node",
+          "match": { "text_contains": "TEXT_PLACEHOLDER" },
+          "timeout": 5
+        },
+        {
+          "action": "wait_node",
+          "match": { "text_contains": "CONFIRM_TEXT_PLACEHOLDER" },
+          "timeout": 5,
+          "optional": true
+        },
+        {
+          "action": "tap_node",
+          "match": { "text_contains": "CONFIRM_TEXT_PLACEHOLDER" },
+          "optional": true
+        },
+        {
+          "action": "await_notification",
+          "success_contains": ["SUCCESS_TEXT_PLACEHOLDER"],
+          "failure_contains": ["FAILURE_TEXT_PLACEHOLDER"],
+          "timeout": 60
+        }
+      ]
+    },
+    "aircon_off": {
+      "description": "미확정. 위젯에 끄기 버튼이 없으면 앱 경로로 정의한다.",
+      "steps": []
+    }
+  }
+}
