@@ -813,21 +813,55 @@ run is coordinated with the user separately, so await_notification
 keeps its placeholders for now and the sequence stays gated by
 E_RECIPE_INCOMPLETE until then.
 
-- [ ] BLOCKED on user: the phone has a PIN lock screen (spec §12
+- [x] BLOCKED on user: the phone has a PIN lock screen (spec §12
       requires none). First wake+dump captured the swipe keyguard;
       `wm dismiss-keyguard` then raised the PIN bouncer
       (com.android.systemui pinEntry nodes in the dump), which must
       not be bypassed. User needs to set 설정 > 잠금화면 > 화면 잠금
       방식 > 없음 on the dedicated phone, then this gate resumes.
-- [ ] Wake the phone and confirm the widget page is the current
+      — user removed the lock; next dump reached the home screen
+- [x] Wake the phone and confirm the widget page is the current
       home screen, then capture_dump via the HA service
-- [ ] Identify the widget button nodes (켜기/잠금/시작/종료) in the
+- [x] Identify the widget button nodes (켜기/잠금/시작/종료) in the
       XML: resource-id, text, content-desc, bounds
-- [ ] Fill the aircon_on tap step in recipes/default.json with the
+- [x] Fill the aircon_on tap step in recipes/default.json with the
       real identifier; keep await_notification placeholders until
       the observed real run
-- [ ] Update/extend unit tests for the filled recipe; all green on
-      the board venv
-- [ ] Deploy + reload_recipe on the board; run_sequence must still
+- [x] Update/extend unit tests for the filled recipe; all green on
+      the board venv — 30 passed
+- [x] Deploy + reload_recipe on the board; run_sequence must still
       refuse with E_RECIPE_INCOMPLETE (notification texts pending)
-- [ ] Record results below
+- [x] Record results below
+
+### Results (2026-09-01, stage 5 gate)
+
+- Dump 20260901-040751-widget_retry.xml (captured via the HA
+  capture_dump service after the user removed the PIN lock) holds
+  the full widget hierarchy: AppWidgetHostView desc "차량 상태와
+  제어", package com.hyundai.oneapp.kr, on the default launcher
+  page (page 1 of 2), showing 캐스퍼 Electric 98 % / 395 km.
+- U3 answered: every widget button node has an EMPTY resource-id
+  (RemoteViews); the reliable identifiers are the icon ImageViews'
+  content-desc values — "공조 켜기", "공조 끄기", "문 잠금",
+  "충전 시작" — with label TextViews 켜기/끄기/잠금/시작. The
+  clickable element is each button's parent FrameLayout; the icon
+  node's center lies inside it, so tap_node on the icon works.
+- U7 answered YES: the widget has a dedicated 공조 끄기 button, so
+  aircon_off is defined as a widget-path sequence symmetric to
+  aircon_on (spec §6.1's no-off fallback is not needed).
+- U9 re-confirmed and screen check: launcher focus is only visible
+  via plain `dumpsys window` on this Android 15 build
+  (`dumpsys window windows` is empty); the executor's existing
+  fallback chain already handles it — mCurrentFocus shows
+  LauncherActivity, so wait_focus "Launcher" works unchanged.
+- recipes/default.json filled with the real content_desc matches
+  for both sequences; confirm-popup steps left out until a real
+  command is observed (U4); await_notification keeps placeholder
+  texts so both sequences stay gated by E_RECIPE_INCOMPLETE.
+- Verified: 30/30 tests on the board venv; reload_recipe 200 on
+  the live HA; run_sequence aircon_on still correctly refuses with
+  E_RECIPE_INCOMPLETE.
+- Remaining for this gate (user coordination): one observed real
+  aircon command for U4 (popup?) + U5/U6 (notification texts), and
+  a logout dump for U8 (login_markers). GitHub issue #21, branch
+  feature/myhyundai-recipe-values.

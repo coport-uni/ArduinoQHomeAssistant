@@ -5,27 +5,27 @@
   "login_markers": ["LOGIN_MARKER_PLACEHOLDER"],
   "sequences": {
     "aircon_on": {
-      "description": "홈 화면 위젯 시동 공조 실행",
+      "description": "홈 화면 위젯의 공조 켜기 버튼 탭. 노드 식별자는 2026-09-01 실기기 덤프(20260901-040751-widget_retry.xml)에서 확정. 확인 팝업(U4)은 실차 명령 관찰 후 필요 시 추가. 알림 문구(U5/U6)는 관찰 전까지 자리표시자로 두어 실행이 차단된다.",
       "steps": [
         { "action": "assert_screen" },
         { "action": "wake" },
         { "action": "home" },
         { "action": "wait_focus", "pattern": "Launcher", "timeout": 5 },
         {
-          "action": "tap_node",
-          "match": { "text_contains": "TEXT_PLACEHOLDER" },
+          "action": "wait_node",
+          "match": {
+            "content_desc": "공조 켜기",
+            "package": "com.hyundai.oneapp.kr"
+          },
           "timeout": 5
         },
         {
-          "action": "wait_node",
-          "match": { "text_contains": "CONFIRM_TEXT_PLACEHOLDER" },
-          "timeout": 5,
-          "optional": true
-        },
-        {
           "action": "tap_node",
-          "match": { "text_contains": "CONFIRM_TEXT_PLACEHOLDER" },
-          "optional": true
+          "match": {
+            "content_desc": "공조 켜기",
+            "package": "com.hyundai.oneapp.kr"
+          },
+          "timeout": 5
         },
         {
           "action": "await_notification",
@@ -36,8 +36,35 @@
       ]
     },
     "aircon_off": {
-      "description": "미확정. 위젯에 끄기 버튼이 없으면 앱 경로로 정의한다.",
-      "steps": []
+      "description": "홈 화면 위젯의 공조 끄기 버튼 탭(U7: 위젯에 끄기 버튼 존재 확인됨). 알림 문구는 관찰 전까지 자리표시자.",
+      "steps": [
+        { "action": "assert_screen" },
+        { "action": "wake" },
+        { "action": "home" },
+        { "action": "wait_focus", "pattern": "Launcher", "timeout": 5 },
+        {
+          "action": "wait_node",
+          "match": {
+            "content_desc": "공조 끄기",
+            "package": "com.hyundai.oneapp.kr"
+          },
+          "timeout": 5
+        },
+        {
+          "action": "tap_node",
+          "match": {
+            "content_desc": "공조 끄기",
+            "package": "com.hyundai.oneapp.kr"
+          },
+          "timeout": 5
+        },
+        {
+          "action": "await_notification",
+          "success_contains": ["SUCCESS_TEXT_PLACEHOLDER"],
+          "failure_contains": ["FAILURE_TEXT_PLACEHOLDER"],
+          "timeout": 60
+        }
+      ]
     }
   }
 }
