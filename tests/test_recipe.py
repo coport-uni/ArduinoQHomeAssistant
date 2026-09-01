@@ -38,11 +38,22 @@ def _write_recipe(tmp_path: Path, data: dict) -> Path:
 
 
 def test_shipped_default_recipe_flags_placeholders() -> None:
-    """The shipped default.json validates but is marked incomplete."""
+    """The shipped default.json validates but stays gated.
+
+    The tap targets carry the real content-desc values read from the
+    2026-09-01 device dump, while the notification texts are still
+    placeholders, so both sequences must remain flagged incomplete.
+    """
     recipe = load_recipe(COMPONENT_DIR / "recipes" / "default.json")
     assert recipe.package == "com.hyundai.oneapp.kr"
-    assert recipe.sequences["aircon_on"].has_placeholders
-    assert not recipe.sequences["aircon_off"].steps
+    for name, target in (
+        ("aircon_on", "공조 켜기"),
+        ("aircon_off", "공조 끄기"),
+    ):
+        sequence = recipe.sequences[name]
+        assert sequence.has_placeholders
+        taps = [s for s in sequence.steps if s.action == "tap_node"]
+        assert taps[0].params["match"]["content_desc"] == target
     assert recipe.login_markers
 
 
