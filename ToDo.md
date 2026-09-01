@@ -1020,10 +1020,20 @@ inspection; ha_add_tapo.sh in claude_test/)
       192.168.31.19 (18:69:45:71:0C:49) and 192.168.31.240
       (18:69:45:71:05:EC), same as the 2026-07-27 records; HA's
       only pending discovery flow is the MiWiFi router (upnp)
-- [ ] BLOCKED on user: register both plugs — KLAP needs the
+- [x] BLOCKED on user: register both plugs — KLAP needs the
       TP-Link account credentials (verify with python-kasa first
-      per LP §2; never stored in the repo)
-- [ ] Verify entities + a safe toggle test on one plug
+      per LP §2; never stored in the repo) — user provided them in
+      chat; verified against .19 with the kasa CLI, then both
+      registered via ha_add_tapo.sh (DormTapo1 P110M and DormTapo2
+      P110M create_entry; the second flow reused HA's stored
+      credentials and skipped the auth step)
+- [x] Verify entities + a safe toggle test on one plug — 32 tapo
+      entities incl. current_consumption sensors (0.4 W / 1.7 W,
+      safe); toggle_test.sh on switch.dormtapo1 6/6 OK at 3 s
+      cadence; plug restored to its initial ON state afterwards.
+      Gotcha repeat: the script streamed from this Windows
+      checkout needed CRLF stripping (sed on the fly) — LP §5
+      pattern, ssh-stream variant
 - [x] Research and summarize the top-3 HACS themes — by GitHub
       hacs-theme topic stars + community citations: ① Frosted
       Glass (wessamlauf, ~988★, glassmorphism) ② Graphite
@@ -1033,4 +1043,27 @@ inspection; ha_add_tapo.sh in claude_test/)
       (Nerwyn, ~466★). Full comparison delivered in chat;
       background in docs/ha-dashboard-research.md (other session's
       uncommitted file, untouched)
-- [ ] Record results below
+- [x] Apply the user-chosen Graphite theme (added mid-task): theme
+      yamls (dark/light/auto) downloaded into ha_config/themes/,
+      `frontend: themes: !include_dir_merge_named themes` appended
+      to configuration.yaml (single-file backup kept as
+      configuration.yaml.bak-20260901), config validated with
+      `hass --script check_config`, HA restarted, default theme
+      set to "Graphite Auto" via frontend.set_theme — verified
+      over the websocket API (3 themes loaded, default confirmed);
+      Tapo (32) and myhyundai (5) entities all alive post-restart
+- [x] Record results below
+
+### Results (2026-09-01)
+
+- Plugs: DormTapo1 (192.168.31.19) and DormTapo2 (192.168.31.240)
+  registered in the venv HA with full entity sets incl. energy
+  sensors; end-to-end toggle verified 6/6 and initial state
+  restored.
+- Theme: Graphite (TilmanGriesel) installed manually (no HACS on
+  this HA — same OAuth-interactive limitation as the 2026-07-27
+  rig); "Graphite Auto" is the backend default so it follows
+  light/dark automatically for all users.
+- Theme survey delivered in chat: ① Frosted Glass (~988★)
+  ② Graphite (~455★, chosen) ③ Catppuccin, runner-up Material
+  You (~466★).
