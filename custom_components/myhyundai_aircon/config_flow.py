@@ -37,6 +37,7 @@ from .const import (
     CONF_RETRY_MAX,
     CONF_SCREEN_CHECK_ENABLED,
     CONF_SEQUENCE_TIMEOUT_SEC,
+    CONF_VEHICLE_POLL_MINUTES,
     DEFAULT_ADBKEY_FILENAME,
     DEFAULT_AIRCON_MAX_MINUTES,
     DEFAULT_BATTERY_FLOOR_PCT,
@@ -48,6 +49,7 @@ from .const import (
     DEFAULT_RETRY_GAP_SEC,
     DEFAULT_RETRY_MAX,
     DEFAULT_SEQUENCE_TIMEOUT_SEC,
+    DEFAULT_VEHICLE_POLL_MINUTES,
     DOMAIN,
 )
 
@@ -180,6 +182,10 @@ _OPTIONS_SCHEMA = vol.Schema(
         ): vol.All(_positive_int_selector(600), vol.Coerce(int)),
         vol.Optional(CONF_SCREEN_CHECK_ENABLED, default=True): bool,
         vol.Optional(CONF_DUMP_ON_FAILURE, default=True): bool,
+        vol.Optional(
+            CONF_VEHICLE_POLL_MINUTES,
+            default=DEFAULT_VEHICLE_POLL_MINUTES,
+        ): vol.All(_positive_int_selector(1440), vol.Coerce(int)),
     }
 )
 

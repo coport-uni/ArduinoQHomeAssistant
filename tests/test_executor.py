@@ -83,6 +83,11 @@ class FakeAdbClient:
             return self.ui_xml
         if "mWakefulness" in command:
             return "  mWakefulness=Awake\n"
+        if "mCurrentFocus" in command:
+            return (
+                "  mCurrentFocus=Window{1 u0"
+                " com.sec.android.app.launcher/.Launcher}\n"
+            )
         if "dumpsys notification" in command:
             if len(self.notification_dumps) > 1:
                 return self.notification_dumps.pop(0)
@@ -220,6 +225,19 @@ async def test_unknown_sequence_refused() -> None:
     with pytest.raises(SequenceError) as err:
         await executor.async_run_sequence("missing")
     assert err.value.code == ERR_UNKNOWN_SEQUENCE
+
+
+async def test_snapshot_home_nodes_reads_and_respects_lock() -> None:
+    """The read-only snapshot returns nodes and yields to sequences."""
+    executor, _ = _make_executor([_step("sleep", seconds=0.3)])
+    nodes = await executor.async_snapshot_home_nodes()
+    assert any(node.text == "켜기" for node in nodes)
+    task = asyncio.create_task(executor.async_run_sequence("seq"))
+    await asyncio.sleep(0.05)
+    with pytest.raises(SequenceError) as err:
+        await executor.async_snapshot_home_nodes()
+    assert err.value.code == ERR_COOLDOWN
+    assert (await task)["result"] == "success"
 
 
 async def test_concurrent_run_hits_cooldown() -> None:

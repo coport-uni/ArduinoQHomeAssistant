@@ -36,7 +36,8 @@
           "retry_max": "최대 재시도 횟수",
           "retry_gap_sec": "재시도 간격 (초)",
           "screen_check_enabled": "실행 전 해상도 검증",
-          "dump_on_failure": "실패 시 UI 덤프 저장"
+          "dump_on_failure": "실패 시 UI 덤프 저장",
+          "vehicle_poll_minutes": "차량 데이터 수집 간격 (분, 0=끄기)"
         }
       }
     }

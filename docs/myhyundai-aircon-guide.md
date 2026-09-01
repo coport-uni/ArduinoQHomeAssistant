@@ -121,6 +121,18 @@ notification wait limit is set per-step in the recipe instead.
 | `sensor.myhyundai_last_error` | last spec §9.3 error code or `none` |
 | `sensor.myhyundai_last_notification` | last judged notification text |
 | `binary_sensor.myhyundai_device_connected` | ADB reachability (30 s poll, 5/15/45/60 s reconnect backoff) |
+| `sensor.myhyundai_vehicle_battery` | EV battery %, scraped read-only from the widget |
+| `sensor.myhyundai_vehicle_range` | Driving range (km), scraped from the widget |
+| `binary_sensor.myhyundai_doors_locked` | 문잠김/문열림 from the widget status text; unknown until observed |
+| `sensor.myhyundai_data_updated_at` | The widget's "N시 기준" timestamp (Korean 오전/오후 parsed; day rolls back when needed — requires the HA timezone to be set correctly) |
+| `sensor.myhyundai_app_version` | MyHyundai versionName from `dumpsys package` — automate an alert on change to catch UI-breaking updates early |
+
+The vehicle sensors come from a **read-only widget scrape** (wake →
+home → UI dump → parse) every `vehicle_poll_minutes` (default 15,
+0 disables), serialized behind the sequence lock and never sending
+a vehicle command. A failed scrape keeps the previous values. The
+widget's refresh control is deliberately never tapped — it may ping
+the vehicle.
 
 | Service | Purpose |
 |---|---|

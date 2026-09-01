@@ -122,6 +122,16 @@ detection, #2 reproducibility guide, #3 WiFi + VS Code Remote-SSH,
   stream a script over ssh stdin if it invokes adb (or any
   stdin-reading command); copy it to a file first. (from ToDo#21)
 
+- **Problem**: A timestamp sensor parsed from Korean on-screen
+  text landed 9 hours off. **Cause**: A headlessly onboarded HA
+  keeps time_zone=UTC, so dt_util.now() anchors local-looking
+  times wrongly; the REST /api/config/core/update endpoint
+  silently ignored a time_zone change. **Fix**: Set it over the
+  WebSocket API (`config/core/update` with time_zone) and restart
+  HA. **Rule**: Always set the HA core time zone right after a
+  headless onboarding, and use the WebSocket API for core config
+  changes. (from ToDo#26)
+
 ## §4. Workflow Lessons
 
 - **Problem**: CLAUDE.md §4 requires GitHub issue/branch/PR but the repo

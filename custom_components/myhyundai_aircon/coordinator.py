@@ -24,6 +24,11 @@ from homeassistant.helpers.update_coordinator import (
 from homeassistant.util import dt as dt_util
 
 from .adb_client import AdbClient, AdbClientError
+from .vehicle_data import (
+    VehicleData,
+    parse_app_version,
+    parse_vehicle_data,
+)
 from .const import (
     CONF_BATTERY_FLOOR_PCT,
     CONF_BATTERY_SENSOR,
@@ -34,6 +39,7 @@ from .const import (
     CONF_RETRY_MAX,
     CONF_SCREEN_CHECK_ENABLED,
     CONF_SEQUENCE_TIMEOUT_SEC,
+    CONF_VEHICLE_POLL_MINUTES,
     COORDINATOR_INTERVAL_S,
     DEFAULT_BATTERY_FLOOR_PCT,
     DEFAULT_COMMAND_MIN_GAP_SEC,
@@ -41,6 +47,7 @@ from .const import (
     DEFAULT_RETRY_GAP_SEC,
     DEFAULT_RETRY_MAX,
     DEFAULT_SEQUENCE_TIMEOUT_SEC,
+    DEFAULT_VEHICLE_POLL_MINUTES,
     DOMAIN,
     ERR_BATTERY_LOW,
     ERR_COOLDOWN,
@@ -87,6 +94,10 @@ class MyHyundaiCoordinator(DataUpdateCoordinator[bool]):
         self.last_success_at: datetime | None = None
         self._last_attempt_monotonic: float | None = None
         self._last_success_monotonic: float | None = None
+        # Read-only widget scrape results (vehicle sensors).
+        self.vehicle_data = VehicleData()
+        self.app_version: str | None = None
+        self._last_vehicle_poll_monotonic: float | None = None
 
     async def async_execute(
         self, sequence: str, *, ignore_guards: bool = False
@@ -270,6 +281,7 @@ class MyHyundaiCoordinator(DataUpdateCoordinator[bool]):
                 _LOGGER.debug("ADB session dropped; will reconnect")
             else:
                 self._reset_backoff()
+                await self._maybe_poll_vehicle_data()
                 return True
         try:
             await self.client.async_connect()
@@ -283,7 +295,44 @@ class MyHyundaiCoordinator(DataUpdateCoordinator[bool]):
                 f"device unreachable, retrying in {delay} s: {err}"
             ) from err
         self._reset_backoff()
+        await self._maybe_poll_vehicle_data()
         return True
+
+    async def _maybe_poll_vehicle_data(self) -> None:
+        """Scrape the widget when the poll interval has elapsed.
+
+        Piggybacks on the connectivity poll; read-only, never sends
+        a vehicle command, and skips silently when a sequence holds
+        the executor lock. A scrape failure keeps the previous
+        snapshot so sensors degrade to stale, not broken.
+        """
+        minutes = self._option(
+            CONF_VEHICLE_POLL_MINUTES, DEFAULT_VEHICLE_POLL_MINUTES
+        )
+        if minutes <= 0 or self.executor is None:
+            return
+        now = time.monotonic()
+        if (
+            self._last_vehicle_poll_monotonic is not None
+            and now - self._last_vehicle_poll_monotonic < minutes * 60
+        ):
+            return
+        try:
+            nodes = await self.executor.async_snapshot_home_nodes()
+            version_line = await self.client.async_shell(
+                "dumpsys package"
+                f" {self.executor.recipe.package}"
+                " | grep versionName"
+            )
+        except (SequenceError, AdbClientError) as err:
+            _LOGGER.warning("Vehicle data poll skipped: %s", err)
+            return
+        self._last_vehicle_poll_monotonic = now
+        self.vehicle_data = parse_vehicle_data(
+            nodes, self.executor.recipe.package, dt_util.now()
+        )
+        self.app_version = parse_app_version(version_line)
+        _LOGGER.debug("Vehicle data: %s", self.vehicle_data)
 
     def _reset_backoff(self) -> None:
         """Return to the normal poll cadence after a good check."""

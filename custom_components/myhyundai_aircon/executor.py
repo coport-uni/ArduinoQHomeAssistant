@@ -259,6 +259,26 @@ class SequenceExecutor:
                 "notification_text": self.last_notification_text,
             }
 
+    async def async_snapshot_home_nodes(self) -> list[UiNode]:
+        """Wake the device, go home, and return the parsed UI nodes.
+
+        Read-only path used for vehicle-data scraping; serialized
+        behind the same lock as sequences so it never interleaves
+        with a running command.
+
+        Raises:
+            SequenceError: E_COOLDOWN while a sequence is running,
+                or the usual codes from the wake/home/dump steps.
+        """
+        if self._lock.locked():
+            raise SequenceError(
+                ERR_COOLDOWN, "a sequence is running; skip this poll"
+            )
+        async with self._lock:
+            await self._step_wake()
+            await self._step_home()
+            return await self._get_nodes()
+
     async def async_capture_ui_xml(self) -> str:
         """Dump the current UI hierarchy and return the XML text."""
         output = await self._shell(

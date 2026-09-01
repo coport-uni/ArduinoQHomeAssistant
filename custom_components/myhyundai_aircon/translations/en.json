@@ -36,7 +36,8 @@
           "retry_max": "Maximum retries",
           "retry_gap_sec": "Gap between retries (s)",
           "screen_check_enabled": "Check screen resolution before runs",
-          "dump_on_failure": "Save a UI dump on failure"
+          "dump_on_failure": "Save a UI dump on failure",
+          "vehicle_poll_minutes": "Vehicle data poll interval (min, 0 = off)"
         }
       }
     }
