@@ -20,5 +20,25 @@
     "abort": {
       "already_configured": "This Android device is already configured."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "MyHyundai Aircon tuning",
+        "data": {
+          "recipe_file": "Recipe file name",
+          "battery_sensor": "Vehicle battery sensor (optional)",
+          "battery_floor_pct": "Block runs under this battery %",
+          "command_min_gap_sec": "Minimum gap between commands (s)",
+          "cooldown_sec": "Cooldown after a run (s)",
+          "aircon_max_minutes": "Auto-off after (min, vehicle max)",
+          "sequence_timeout_sec": "Whole-sequence timeout (s)",
+          "retry_max": "Maximum retries",
+          "retry_gap_sec": "Gap between retries (s)",
+          "screen_check_enabled": "Check screen resolution before runs",
+          "dump_on_failure": "Save a UI dump on failure"
+        }
+      }
+    }
   }
 }

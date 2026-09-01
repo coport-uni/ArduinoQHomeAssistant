@@ -6,8 +6,15 @@ import logging
 from typing import Any
 
 import voluptuous as vol
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
+from homeassistant.config_entries import (
+    ConfigEntry,
+    ConfigFlow,
+    ConfigFlowResult,
+    OptionsFlow,
+)
 from homeassistant.const import CONF_HOST, CONF_PORT
+from homeassistant.core import callback
+from homeassistant.helpers import selector
 
 from .adb_client import (
     AdbClient,
@@ -17,11 +24,30 @@ from .adb_client import (
 )
 from .const import (
     CONF_ADBKEY_PATH,
+    CONF_AIRCON_MAX_MINUTES,
     CONF_BASELINE_SCREEN,
+    CONF_BATTERY_FLOOR_PCT,
+    CONF_BATTERY_SENSOR,
+    CONF_COMMAND_MIN_GAP_SEC,
+    CONF_COOLDOWN_SEC,
     CONF_DEVICE_NAME,
+    CONF_DUMP_ON_FAILURE,
+    CONF_RECIPE_FILE,
+    CONF_RETRY_GAP_SEC,
+    CONF_RETRY_MAX,
+    CONF_SCREEN_CHECK_ENABLED,
+    CONF_SEQUENCE_TIMEOUT_SEC,
     DEFAULT_ADBKEY_FILENAME,
+    DEFAULT_AIRCON_MAX_MINUTES,
+    DEFAULT_BATTERY_FLOOR_PCT,
+    DEFAULT_COMMAND_MIN_GAP_SEC,
+    DEFAULT_COOLDOWN_SEC,
     DEFAULT_DEVICE_NAME,
     DEFAULT_PORT,
+    DEFAULT_RECIPE_FILE,
+    DEFAULT_RETRY_GAP_SEC,
+    DEFAULT_RETRY_MAX,
+    DEFAULT_SEQUENCE_TIMEOUT_SEC,
     DOMAIN,
 )
 
@@ -47,6 +73,14 @@ class MyHyundaiConfigFlow(ConfigFlow, domain=DOMAIN):
     """
 
     VERSION = 1
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: ConfigEntry,
+    ) -> MyHyundaiOptionsFlow:
+        """Return the options flow handler."""
+        return MyHyundaiOptionsFlow()
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -96,4 +130,72 @@ class MyHyundaiConfigFlow(ConfigFlow, domain=DOMAIN):
                 _USER_SCHEMA, user_input
             ),
             errors=errors,
+        )
+
+
+def _positive_int_selector(maximum: int) -> selector.NumberSelector:
+    """A whole-number box selector from 0 to ``maximum``."""
+    return selector.NumberSelector(
+        selector.NumberSelectorConfig(
+            min=0,
+            max=maximum,
+            step=1,
+            mode=selector.NumberSelectorMode.BOX,
+        )
+    )
+
+
+_OPTIONS_SCHEMA = vol.Schema(
+    {
+        vol.Optional(CONF_RECIPE_FILE, default=DEFAULT_RECIPE_FILE): str,
+        vol.Optional(CONF_BATTERY_SENSOR, default=""): (
+            selector.EntitySelector(
+                selector.EntitySelectorConfig(domain="sensor")
+            )
+        ),
+        vol.Optional(
+            CONF_BATTERY_FLOOR_PCT,
+            default=DEFAULT_BATTERY_FLOOR_PCT,
+        ): vol.All(_positive_int_selector(100), vol.Coerce(int)),
+        vol.Optional(
+            CONF_COMMAND_MIN_GAP_SEC,
+            default=DEFAULT_COMMAND_MIN_GAP_SEC,
+        ): vol.All(_positive_int_selector(3600), vol.Coerce(int)),
+        vol.Optional(CONF_COOLDOWN_SEC, default=DEFAULT_COOLDOWN_SEC): vol.All(
+            _positive_int_selector(3600), vol.Coerce(int)
+        ),
+        vol.Optional(
+            CONF_AIRCON_MAX_MINUTES,
+            default=DEFAULT_AIRCON_MAX_MINUTES,
+        ): vol.All(_positive_int_selector(60), vol.Coerce(int)),
+        vol.Optional(
+            CONF_SEQUENCE_TIMEOUT_SEC,
+            default=DEFAULT_SEQUENCE_TIMEOUT_SEC,
+        ): vol.All(_positive_int_selector(600), vol.Coerce(int)),
+        vol.Optional(CONF_RETRY_MAX, default=DEFAULT_RETRY_MAX): vol.All(
+            _positive_int_selector(5), vol.Coerce(int)
+        ),
+        vol.Optional(
+            CONF_RETRY_GAP_SEC, default=DEFAULT_RETRY_GAP_SEC
+        ): vol.All(_positive_int_selector(600), vol.Coerce(int)),
+        vol.Optional(CONF_SCREEN_CHECK_ENABLED, default=True): bool,
+        vol.Optional(CONF_DUMP_ON_FAILURE, default=True): bool,
+    }
+)
+
+
+class MyHyundaiOptionsFlow(OptionsFlow):
+    """Adjust the spec §5.2 tuning values."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Show and store the options form."""
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=self.add_suggested_values_to_schema(
+                _OPTIONS_SCHEMA, self.config_entry.options
+            ),
         )
