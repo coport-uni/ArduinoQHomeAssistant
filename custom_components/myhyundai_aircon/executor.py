@@ -22,13 +22,20 @@ from .const import (
     DEVICE_UI_XML_PATH,
     ERR_COOLDOWN,
     ERR_DEVICE_OFFLINE,
-    ERR_NOT_IMPLEMENTED,
     ERR_RECIPE_INCOMPLETE,
     ERR_SCREEN_MISMATCH,
     ERR_SESSION_EXPIRED,
+    ERR_TIMEOUT,
     ERR_UNKNOWN_SCREEN,
     ERR_UNKNOWN_SEQUENCE,
+    ERR_VEHICLE_FAIL,
     UI_POLL_INTERVAL_S,
+)
+from .notification import (
+    DUMPSYS_NOTIFICATION_COMMAND,
+    extract_display_text,
+    judge_records,
+    parse_package_records,
 )
 from .recipe import Recipe, Step
 
@@ -192,6 +199,11 @@ class SequenceExecutor:
         self.recipe = recipe
         self._baseline_screen = baseline_screen
         self._lock = asyncio.Lock()
+        # Keys of the package's notifications present at sequence
+        # start; await_notification judges only records newer than
+        # these (see notification.py for why this replaces clearing).
+        self._notification_baseline: set[str] = set()
+        self.last_notification_text = ""
 
     async def async_run_sequence(self, name: str) -> dict[str, Any]:
         """Run one named sequence to completion.
@@ -226,6 +238,11 @@ class SequenceExecutor:
         async with self._lock:
             started = time.monotonic()
             _LOGGER.info("Sequence %s started", name)
+            self.last_notification_text = ""
+            if any(
+                step.action == "await_notification" for step in sequence.steps
+            ):
+                await self._snapshot_notification_baseline()
             for index, step in enumerate(sequence.steps):
                 await self._run_step(name, index, step)
             elapsed = round(time.monotonic() - started, 1)
@@ -235,6 +252,7 @@ class SequenceExecutor:
                 "result": "success",
                 "code": None,
                 "elapsed_sec": elapsed,
+                "notification_text": self.last_notification_text,
             }
 
     async def async_capture_ui_xml(self) -> str:
@@ -414,18 +432,59 @@ class SequenceExecutor:
                 " check the fold state",
             )
 
+    async def _snapshot_notification_baseline(self) -> None:
+        """Record which package notifications already exist."""
+        self._notification_baseline = set(
+            await self._get_notification_records()
+        )
+
+    async def _get_notification_records(self) -> dict[str, str]:
+        """Fetch and parse the package's notification records."""
+        dump = await self._shell(DUMPSYS_NOTIFICATION_COMMAND)
+        return parse_package_records(dump, self.recipe.package)
+
     async def _step_await_notification(
         self,
         success_contains: list[str],
         failure_contains: list[str],
         timeout: float,
     ) -> None:
-        """Placeholder until the notification stage (spec §11-6)."""
-        raise SequenceError(
-            ERR_NOT_IMPLEMENTED,
-            "await_notification is not implemented yet;"
-            " it arrives with notification.py",
-        )
+        """Poll for a result notification and judge it (spec §9.2).
+
+        Only records that were not present at sequence start count.
+        Failure markers are checked before success markers. The
+        matched record's display text is kept for the sensors and
+        the result event, truncated to 255 characters.
+        """
+        deadline = time.monotonic() + timeout
+        while True:
+            records = await self._get_notification_records()
+            new_blobs = [
+                blob
+                for key, blob in records.items()
+                if key not in self._notification_baseline
+            ]
+            verdict = judge_records(
+                new_blobs, success_contains, failure_contains
+            )
+            if verdict is not None:
+                texts = (extract_display_text(b) for b in new_blobs)
+                self.last_notification_text = next((t for t in texts if t), "")[
+                    :255
+                ]
+                if verdict == "failure":
+                    raise SequenceError(
+                        ERR_VEHICLE_FAIL,
+                        "failure notification:"
+                        f" {self.last_notification_text!r}",
+                    )
+                return
+            if time.monotonic() >= deadline:
+                raise SequenceError(
+                    ERR_TIMEOUT,
+                    f"no result notification within {timeout} s",
+                )
+            await asyncio.sleep(UI_POLL_INTERVAL_S)
 
     async def _get_screen_dimensions(self) -> tuple[int, int]:
         """Return the live (width, height) for ratio taps."""

@@ -37,24 +37,25 @@ def _write_recipe(tmp_path: Path, data: dict) -> Path:
     return path
 
 
-def test_shipped_default_recipe_flags_placeholders() -> None:
-    """The shipped default.json validates but stays gated.
+def test_shipped_default_recipe_is_complete() -> None:
+    """The shipped default.json is runnable with observed values.
 
-    The tap targets carry the real content-desc values read from the
-    2026-09-01 device dump, while the notification texts are still
-    placeholders, so both sequences must remain flagged incomplete.
+    Tap targets and success notification texts were read from the
+    real device on 2026-09-01; failure texts (U6) are still
+    unobserved, which is legal — a failure then judges as timeout.
     """
     recipe = load_recipe(COMPONENT_DIR / "recipes" / "default.json")
     assert recipe.package == "com.hyundai.oneapp.kr"
-    for name, target in (
-        ("aircon_on", "공조 켜기"),
-        ("aircon_off", "공조 끄기"),
+    for name, target, success in (
+        ("aircon_on", "공조 켜기", "공조가 켜졌습니다"),
+        ("aircon_off", "공조 끄기", "공조가 꺼졌습니다"),
     ):
         sequence = recipe.sequences[name]
-        assert sequence.has_placeholders
+        assert not sequence.has_placeholders
         taps = [s for s in sequence.steps if s.action == "tap_node"]
         assert taps[0].params["match"]["content_desc"] == target
-    assert recipe.login_markers
+        awaits = [s for s in sequence.steps if s.action == "await_notification"]
+        assert awaits[0].params["success_contains"] == [success]
 
 
 def test_minimal_recipe_loads_with_defaults(tmp_path: Path) -> None:

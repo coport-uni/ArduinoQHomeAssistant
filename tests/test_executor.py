@@ -6,12 +6,13 @@ import pytest
 
 from custom_components.myhyundai_aircon.const import (
     ERR_COOLDOWN,
-    ERR_NOT_IMPLEMENTED,
     ERR_RECIPE_INCOMPLETE,
     ERR_SCREEN_MISMATCH,
     ERR_SESSION_EXPIRED,
+    ERR_TIMEOUT,
     ERR_UNKNOWN_SCREEN,
     ERR_UNKNOWN_SEQUENCE,
+    ERR_VEHICLE_FAIL,
 )
 from custom_components.myhyundai_aircon.executor import (
     SequenceError,
@@ -46,6 +47,25 @@ LOGIN_XML = """<?xml version='1.0' encoding='UTF-8'?>
 """
 
 
+def _notification_dump(records: list[tuple[str, str]]) -> str:
+    """Build dumpsys-notification output in the observed format.
+
+    Args:
+        records: (id, text) pairs for com.hyundai.oneapp.kr.
+    """
+    lines = ["  mNotificationList:"]
+    for record_id, text in records:
+        lines.append(
+            "    NotificationRecord(0xabc: pkg=com.hyundai.oneapp.kr"
+            f" user=UserHandle{{0}} id={record_id} tag=null"
+            f" key=0|com.hyundai.oneapp.kr|{record_id}|null|10321:"
+            " Notification(channel=fcm_default_channel))"
+        )
+        lines.append(f"            tickerText={text}")
+        lines.append(f"                android.text=String ({text})")
+    return "\n".join(lines) + "\n"
+
+
 class FakeAdbClient:
     """Records shell commands and serves canned responses."""
 
@@ -53,6 +73,9 @@ class FakeAdbClient:
         self.commands: list[str] = []
         self.ui_xml = ui_xml
         self.screen_size = "840x2289"
+        # Consumed one per dumpsys-notification call; the last one
+        # keeps repeating so polls can outnumber fixtures.
+        self.notification_dumps: list[str] = [_notification_dump([])]
 
     async def async_shell(self, command: str) -> str:
         self.commands.append(command)
@@ -60,6 +83,10 @@ class FakeAdbClient:
             return self.ui_xml
         if "mWakefulness" in command:
             return "  mWakefulness=Awake\n"
+        if "dumpsys notification" in command:
+            if len(self.notification_dumps) > 1:
+                return self.notification_dumps.pop(0)
+            return self.notification_dumps[0]
         return ""
 
     async def async_get_screen_size(self) -> str:
@@ -206,18 +233,48 @@ async def test_concurrent_run_hits_cooldown() -> None:
     assert (await task)["result"] == "success"
 
 
-async def test_await_notification_not_implemented_yet() -> None:
-    """The step is schema-valid but refuses until stage 6 lands."""
-    executor, _ = _make_executor(
-        [
-            _step(
-                "await_notification",
-                success_contains=["ok"],
-                failure_contains=[],
-                timeout=1,
-            )
-        ]
-    )
+def _await_step(**overrides) -> Step:
+    """An await_notification step with observed real markers."""
+    params = {
+        "success_contains": ["공조가 켜졌습니다"],
+        "failure_contains": ["실패"],
+        "timeout": 5,
+    }
+    params.update(overrides)
+    return _step("await_notification", **params)
+
+
+async def test_await_notification_success() -> None:
+    """A new success record ends the sequence with its text."""
+    executor, client = _make_executor([_await_step()])
+    client.notification_dumps = [
+        _notification_dump([("100", "지난 알림")]),
+        _notification_dump(
+            [("100", "지난 알림"), ("200", "공조가 켜졌습니다.")]
+        ),
+    ]
+    result = await executor.async_run_sequence("seq")
+    assert result["result"] == "success"
+    assert result["notification_text"] == "공조가 켜졌습니다."
+
+
+async def test_await_notification_failure_first() -> None:
+    """A failure marker wins even alongside a success marker."""
+    executor, client = _make_executor([_await_step()])
+    client.notification_dumps = [
+        _notification_dump([]),
+        _notification_dump([("200", "공조가 켜졌습니다 실패했습니다")]),
+    ]
     with pytest.raises(SequenceError) as err:
         await executor.async_run_sequence("seq")
-    assert err.value.code == ERR_NOT_IMPLEMENTED
+    assert err.value.code == ERR_VEHICLE_FAIL
+
+
+async def test_await_notification_ignores_stale_records() -> None:
+    """A record already present at start never counts as a result."""
+    stale = _notification_dump([("100", "공조가 켜졌습니다.")])
+    executor, client = _make_executor([_await_step(timeout=0)])
+    client.notification_dumps = [stale]
+    with pytest.raises(SequenceError) as err:
+        await executor.async_run_sequence("seq")
+    assert err.value.code == ERR_TIMEOUT
