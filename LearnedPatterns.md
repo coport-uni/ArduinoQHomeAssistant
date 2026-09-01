@@ -102,6 +102,17 @@ detection, #2 reproducibility guide, #3 WiFi + VS Code Remote-SSH,
   **Rule**: Always give a CommonClaude repo a root pyproject.toml with
   line-length 80 before writing Python. (from ToDo#12)
 
+- **Problem**: Needed the pytest-homeassistant-custom-component
+  release matching the installed HA version; the package pins
+  `homeassistant==X` exactly and a mismatched pick drags in a
+  different HA. **Cause**: phacc tracks HA releases one-to-one but
+  its version numbers (0.13.x) do not encode the HA version.
+  **Fix**: Query PyPI JSON per release and read `requires_dist`
+  (`pypi.org/pypi/<pkg>/<ver>/json`); 0.13.316 pins
+  homeassistant==2026.2.3. **Rule**: Always select phacc by its
+  `requires_dist` homeassistant pin, never by "latest".
+  (from ToDo#17)
+
 ## §4. Workflow Lessons
 
 - **Problem**: CLAUDE.md §4 requires GitHub issue/branch/PR but the repo
@@ -139,6 +150,20 @@ detection, #2 reproducibility guide, #3 WiFi + VS Code Remote-SSH,
   the 4 GB variant (3.6 GiB visible, ~2.4 GiB available with HA up).
   **Rule**: Always check `free -h` before capacity decisions; this
   board comfortably runs HA + vscode-server. (from ToDo#3)
+
+- **Problem**: The board reachable as `unoq` (SungwooQ, .84) was
+  assumed to run HA Container per the guide, but `docker ps` showed
+  no `homeassistant` container and `/home/arduino/homeassistant`
+  did not exist. **Cause**: This unit runs HA Core 2026.2.3 in a
+  Python 3.13 venv (`/home/arduino/ha_venv`) as systemd service
+  `home-assistant.service` with config in `/home/arduino/ha_config`;
+  the container layout belongs to the other unit (uno-q, ex-.172).
+  **Fix**: Probed process/systemd/port level, not just docker.
+  Custom components go in `/home/arduino/ha_config/custom_components`
+  and integration deps install into `ha_venv`. **Rule**: Always
+  identify the HA install method (container vs venv/systemd) on a
+  board before using guide paths — two UNO Q units exist with
+  different layouts. (from ToDo#17)
 
 ## §99. Uncategorized
 
