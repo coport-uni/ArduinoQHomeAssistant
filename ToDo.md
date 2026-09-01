@@ -1003,3 +1003,34 @@ translations already shipped with the code PRs.
 - Spec §11 is now complete: stages 1-9 all delivered and the whole
   stack verified on the real vehicle. Project remains at 0.1.0
   until U6/U8 are observed in the wild.
+
+## 2026-09-01 — Tapo P110M plugs on the venv HA + top-3 HACS themes
+
+Requested by user. Two parts: (a) discover the TP-Link Tapo P110M
+plugs on this network (192.168.31.x — DormTapo1/2 were seen at
+.19/.240 by the 2026-07-27 session on the other board) and register
+them in the SungwooQ venv HA 2026.2.3; KLAP registration will need
+the user's TP-Link account credentials (never stored in this repo).
+(b) survey the currently popular HACS themes and summarize the top
+three. (see LP §3: python-kasa unicast probe, WebSocket flow
+inspection; ha_add_tapo.sh in claude_test/)
+
+- [x] Probe the /24 for Tapo plugs (claude_test/probe_all.py) and
+      check HA's tplink discovery flows — both P110M(KR) found:
+      192.168.31.19 (18:69:45:71:0C:49) and 192.168.31.240
+      (18:69:45:71:05:EC), same as the 2026-07-27 records; HA's
+      only pending discovery flow is the MiWiFi router (upnp)
+- [ ] BLOCKED on user: register both plugs — KLAP needs the
+      TP-Link account credentials (verify with python-kasa first
+      per LP §2; never stored in the repo)
+- [ ] Verify entities + a safe toggle test on one plug
+- [x] Research and summarize the top-3 HACS themes — by GitHub
+      hacs-theme topic stars + community citations: ① Frosted
+      Glass (wessamlauf, ~988★, glassmorphism) ② Graphite
+      (TilmanGriesel, ~455★, calm auto light/dark) ③ Catppuccin
+      (4 pastel flavors; already proven on the other rig as
+      default Mocha). Runner-up: Material You / Material Design 3
+      (Nerwyn, ~466★). Full comparison delivered in chat;
+      background in docs/ha-dashboard-research.md (other session's
+      uncommitted file, untouched)
+- [ ] Record results below
