@@ -3,9 +3,12 @@
 This repository documents a working smart-home test rig built entirely on
 a single **Arduino UNO Q** board:
 
-- **Home Assistant** runs on the board itself (Docker container).
+- **Home Assistant** runs on the board itself — verified in two
+  install styles across two boards: as a Docker container, and as a
+  bare **HA Core venv** managed by systemd (the current SungwooQ rig).
 - Two **TP-Link Tapo P110M** smart plugs are discovered, registered, and
-  controlled through Home Assistant, including live power monitoring.
+  controlled through Home Assistant, including live power monitoring
+  (re-verified from scratch on the venv rig).
 - The board's own **STM32U585 MCU pins** (on-board RGB LEDs, optionally
   header pins D2–D13) appear in Home Assistant as switches, wired
   through MQTT and the UNO Q's internal Linux↔MCU RPC bridge.
@@ -67,13 +70,23 @@ Two consequences that surprise R4 users most:
 │                                                     ▼         │
 │                                        RGB LEDs / D2–D13 pins │
 └───────────────────────────────────────────────────────────────┘
-          │ WiFi (TP-Link_0624, 192.168.1.0/24)
-          ▼
-   2× Tapo P110M smart plugs  ◄── tplink integration (KLAP auth)
+          │ WiFi
+          ├──► 2× Tapo P110M smart plugs   (tplink, KLAP auth)
+          └──► Android phone, MyHyundai widget
+                 (myhyundai_aircon over ADB TCP; the phone also
+                  hangs off the board USB for power + bootstrap)
+                     │  Bluelink push
+                     ▼
+               Hyundai vehicle — remote climate ON/OFF
 ```
 
-- Home Assistant Container 2026.7.2, onboarded headlessly via REST API
-  (no browser needed), long-lived API token minted over WebSocket.
+- Home Assistant onboarded and administered headlessly via REST +
+  WebSocket APIs (no browser needed), long-lived token minted over
+  WebSocket. Container 2026.7.x on one board; HA Core 2026.2.3 in a
+  Python venv (`home-assistant.service`, config in
+  `/home/arduino/ha_config`) on the current rig — custom components
+  go into `ha_config/custom_components/` and integration
+  dependencies auto-install into the venv.
 - Tapo P110M plugs detected two independent ways (python-kasa subnet
   probe + HA tplink discovery), then registered with KLAP credentials.
   Full entity sets including voltage/current/energy sensors.
@@ -84,6 +97,19 @@ Two consequences that surprise R4 users most:
 - The same app renders the Linux side's live CPU/memory load as bars
   on the on-board 8x13 LED matrix (psutil sampling every 2 s, pushed
   to the sketch over Bridge RPC; CPU on 2 rows, MEM on 3).
+- `custom_components/myhyundai_aircon/`: since no official Korean
+  Hyundai control API exists, the component taps the MyHyundai
+  widget on a dedicated Galaxy Z Fold3 (cover screen) over ADB TCP
+  and judges the result from the app's push notifications. Tap
+  sequences are editable JSON "recipes" (every value read from real
+  UI dumps, never guessed); safety guards (cooldown, minimum gap,
+  battery floor), a retry ladder, an auto-off timer matching the
+  vehicle's 10-minute limit, and failure-dump diagnostics are built
+  in. 46 unit tests run on the board itself. Built in one day
+  across 7 PRs against `docs/SPEC-myhyundai-aircon-component.md`.
+- Frontend themed with **Graphite** (top-3 HACS theme, installed
+  manually since HACS's OAuth is interactive): "Graphite Auto" is
+  the backend default and follows light/dark automatically.
 
 ## Verified results
 
@@ -95,6 +121,8 @@ Two consequences that surprise R4 users most:
 | MCU LED toggle via HA → MQTT → RPC, 3 s cadence | 6/6 transitions OK, LED visibly blinking |
 | System-load bars on the 8x13 LED matrix | Idle: CPU 1-2 cols, MEM ~5 cols (~35 %); 4-core `yes` stress grows the CPU bar and it shrinks back; HA switches keep passing 6/6 concurrently |
 | Vehicle aircon via `switch.myhyundai_aircon` (real Casper Electric) | ON judged success in ~32 s, OFF in ~10 s; result read from the app's push notification; 46/46 unit tests on the board |
+| Tapo registration repeated on the venv-HA rig (192.168.31.x) | Both plugs (DormTapo1/2) registered with credential pre-check; 32 entities incl. power sensors; toggle 6/6 with initial state restored |
+| Graphite theme on the venv HA | 3 theme variants loaded from `ha_config/themes/`, "Graphite Auto" confirmed as backend default via the WebSocket API |
 
 ## Repository layout
 
@@ -231,6 +259,20 @@ cost the most time:
   reliable.
 - **HA onboarding tokens expire in ~30 min**; mint a long-lived token
   over the WebSocket API early (`claude_test/ha_login.sh`).
+- **`adb shell` eats scripts streamed over ssh stdin** — a script
+  piped via `ssh 'bash -s' < script.sh` dies silently after its
+  first adb command, because adb consumes the rest of stdin. Copy
+  the script to a file on the board first (and strip CRLF from
+  anything checked out on Windows: `sed 's/\r$//'`).
+- **Debian's `adb` package cannot be installed on the UNO Q** — it
+  conflicts with the board's preinstalled Arduino builds of the
+  android libraries (used by the board's own adbd). Extract the
+  .debs into a user directory instead and run with
+  `LD_LIBRARY_PATH` (see `docs/myhyundai-aircon-guide.md` §7).
+- **Two UNO Q units, two HA layouts**: one runs HA Container with
+  config in `/home/arduino/homeassistant`, the other HA Core in a
+  venv with config in `/home/arduino/ha_config`. Probe
+  `docker ps` AND `systemctl`/port 8123 before assuming paths.
 
 ## Conventions
 
