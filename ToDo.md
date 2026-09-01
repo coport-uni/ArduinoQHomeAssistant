@@ -1092,3 +1092,54 @@ ssh-streamed scripts; Debian adb vs Arduino android libs).
   gained the venv-rig Tapo re-registration and theme rows; gotchas
   gained adb-eats-stdin, the Debian-adb conflict, and the
   two-rigs-two-layouts warning.
+
+## 2026-09-02 — myhyundai_aircon: vehicle data sensors from the
+## widget (read-only scraping)
+
+Requested by user; scope confirmed in chat after a fresh-dump data
+survey (values live: 93 % / 367 km / 문잠김 / 오전 8:07 기준 /
+캐스퍼 Electric / 업데이트-가능 icon). In scope: EV battery %,
+range km, doors-locked binary, data-timestamp (Korean 오전/오후
+parsing with day rollback), vehicle name attribute, plus a
+MyHyundai app-version sensor (dumpsys package) as an early-warning
+for UI-breaking updates. Read-only — no vehicle commands; the
+widget refresh tap stays OUT (may ping the car). Charging state
+and the update-available flag wait for real observation. Polling
+piggybacks the coordinator at a configurable interval (default
+15 min, 0 disables), serialized behind the executor lock so it
+never overlaps a running sequence. (see LP §3, §5)
+
+- [x] vehicle_data.py: node-list parser (battery/range/doors/
+      timestamp/name/update-available) + app-version parser, unit
+      tests from the real dump values
+- [x] executor.async_snapshot_home_nodes (wake → home → dump under
+      the lock; parsing lives in the coordinator to avoid a
+      circular import); coordinator piggyback poll +
+      vehicle_poll_minutes option (+ strings/translations)
+- [x] New entities: sensor.myhyundai_vehicle_battery / _vehicle
+      _range / _data_updated_at / _app_version and
+      binary_sensor.myhyundai_doors_locked
+- [x] Tests green on the board venv; ruff clean — 52 passed
+- [x] Deploy + live verify sensor values against the real widget
+- [x] Update the component guide's entity table
+- [x] Record results below
+
+### Results (2026-09-02)
+
+- Live values on first verified poll: battery 93 %, range 367 km,
+  doors_locked on (문잠김), data_updated_at 08:07 KST (matches the
+  widget exactly), app_version 1.5.1.
+- Two bugs found during live verification: (1) the vehicle poll
+  was only wired into the reconnect branch of _async_update_data —
+  the steady-state early return skipped it; (2) the very first
+  refresh runs before the executor is attached, so setup now
+  requests one more (debounced) refresh after wiring. Both fixed
+  and covered by the deploy re-test.
+- Timezone gotcha: this headlessly onboarded HA had time_zone=UTC,
+  which anchored the Korean widget clock 9 h off. REST
+  /api/config/core/update ignored the change; the WEBSOCKET
+  config/core/update set Asia/Seoul successfully (needs restart).
+  Recorded for LearnedPatterns.
+- 52/52 tests on the board venv; scrape is read-only, lock-safe,
+  refresh control never tapped. GitHub issue #32, branch
+  feature/myhyundai-vehicle-data.

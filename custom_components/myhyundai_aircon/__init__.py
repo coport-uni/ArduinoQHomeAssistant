@@ -114,6 +114,10 @@ async def async_setup_entry(
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _register_services(hass)
     entry.async_on_unload(entry.add_update_listener(_handle_options_update))
+    # The first refresh ran before the executor existed, so the
+    # initial vehicle-data scrape was skipped; request another
+    # (debounced) update now that everything is wired.
+    entry.async_create_task(hass, coordinator.async_request_refresh())
     return True
 
 
