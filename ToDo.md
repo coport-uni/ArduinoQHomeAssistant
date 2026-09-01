@@ -965,3 +965,41 @@ data. U8 (login markers) stays open. (see LP §3, §5)
 - Remaining project work: docs PR (README, §12 device-prep table,
   HACS shape) and the open observations U6 (failure text) + U8
   (login markers), both fillable later via recipe edits alone.
+
+## 2026-09-01 — myhyundai_aircon PR 4: documentation (spec §11
+## stage 9)
+
+Requested by user ("그렇게해줘. 그리고 main 브랜치에도 포함해줘"
+after PR #25 merged). Final PR of the plan: a full guide document
+(docs/myhyundai-aircon-guide.md, English per CLAUDE.md §2) with the
+spec §12 device-prep table, install/config/usage, error-code
+reference, recipe-editing instructions for the still-open U6/U8
+values, and the §15 caveats; a myhyundai_aircon section in
+README.md; and a root hacs.json for the HACS-capable shape. Merge
+to main afterwards per the user's request. ko/en entity
+translations already shipped with the code PRs.
+
+- [x] Write docs/myhyundai-aircon-guide.md
+- [x] Add the component to README.md (what was built, verified
+      results, repo layout)
+- [x] Add hacs.json (HACS custom-repository shape)
+- [x] PR + merge to main
+- [x] Record results below
+
+### Results (2026-09-01, PR 4: documentation)
+
+- docs/myhyundai-aircon-guide.md covers: architecture, the §12
+  phone-prep table with the two hardware-proven REQUIRED rows (USB
+  debugging, lock screen NONE — the PIN incident), venv-install
+  deploy commands for this rig, config-flow and options reference
+  (incl. the do-not-lower-cooldown §15 warning), entity/service/
+  event reference with the cooldown-blocks-immediate-OFF note, the
+  §9.3 error-code table, UNO Q rig specifics (adb-local client,
+  TCP re-arm after phone reboot), and recipe-maintenance
+  instructions for the still-open U6/U8 values.
+- README: component added to the intro, verified-results row, and
+  repo-layout rows (guide, spec, custom_components/, tests/).
+- hacs.json added for the HACS custom-repository shape (spec §3).
+- Spec §11 is now complete: stages 1-9 all delivered and the whole
+  stack verified on the real vehicle. Project remains at 0.1.0
+  until U6/U8 are observed in the wild.

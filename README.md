@@ -9,6 +9,11 @@ a single **Arduino UNO Q** board:
 - The board's own **STM32U585 MCU pins** (on-board RGB LEDs, optionally
   header pins D2–D13) appear in Home Assistant as switches, wired
   through MQTT and the UNO Q's internal Linux↔MCU RPC bridge.
+- A **real Hyundai vehicle's remote climate** is switched from Home
+  Assistant via the `myhyundai_aircon` custom component, which drives
+  the MyHyundai app widget on a dedicated Android phone over ADB
+  (no official Korean-region control API exists). See
+  [docs/myhyundai-aircon-guide.md](docs/myhyundai-aircon-guide.md).
 - Everything is driven remotely from a host PC over **WiFi (SSH)**.
   USB/ADB is used exactly once, to join WiFi and enable SSH — after
   that the USB port stays free for expansion devices such as a Zigbee
@@ -89,6 +94,7 @@ Two consequences that surprise R4 users most:
 | Tapo relay toggle via HA, 3 s cadence | 6/6 transitions OK, ~1 s latency |
 | MCU LED toggle via HA → MQTT → RPC, 3 s cadence | 6/6 transitions OK, LED visibly blinking |
 | System-load bars on the 8x13 LED matrix | Idle: CPU 1-2 cols, MEM ~5 cols (~35 %); 4-core `yes` stress grows the CPU bar and it shrinks back; HA switches keep passing 6/6 concurrently |
+| Vehicle aircon via `switch.myhyundai_aircon` (real Casper Electric) | ON judged success in ~32 s, OFF in ~10 s; result read from the app's push notification; 46/46 unit tests on the board |
 
 ## Repository layout
 
@@ -96,6 +102,10 @@ Two consequences that surprise R4 users most:
 |---|---|
 | `docs/home-assistant-uno-q-guide.md` | **Main guide**: step-by-step from the one-time ADB bootstrap to controlling MCU pins from HA over SSH, with troubleshooting. Start here. |
 | `docs/uno-q-vscode-wifi-guide.md` | Developing the UNO Q over WiFi with VS Code Remote-SSH (no USB cable) |
+| `docs/myhyundai-aircon-guide.md` | Vehicle remote-climate component: phone prep, install, entities/services, error codes, recipe maintenance |
+| `docs/SPEC-myhyundai-aircon-component.md` | The development spec the component was built against |
+| `custom_components/myhyundai_aircon/` | HA custom component driving the MyHyundai widget over ADB (recipes are editable JSON) |
+| `tests/` | Production unit tests for the custom component (pytest-homeassistant-custom-component) |
 | `apps/ha-mcu-bridge/` | App Lab app: MCU sketch (pin RPC) + Python MQTT bridge with HA Discovery |
 | `apps/mosquitto/mosquitto.conf` | MQTT broker config (host-local listeners, nothing on the LAN) |
 | `claude_test/` | Working diagnostic scripts (subnet Tapo probe, HA onboarding/auth/registration, toggle tester) — each documented in its README |
