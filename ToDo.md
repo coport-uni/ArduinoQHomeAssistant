@@ -1,5 +1,106 @@
 # ToDo.md
 
+## 2026-07-27 — ha-mcu-bridge on uno-q (matrix load bars) + reboot persistence
+
+Requested by user: reproduce the original rig's LED-matrix CPU/MEM load
+bars on the new board (uno-q), and make HA and the MCU sketch survive a
+board reboot. GitHub issue #12.
+
+- [x] Deploy apps/ha-mcu-bridge over SSH (scp + CRLF strip on the
+      board), first build compiled zephyr + flashed the STM32U585 via
+      on-board OpenOCD; python container logs "MQTT connected: Success"
+- [x] Verify bridge: unoq/bridge/availability online + 6 retained LED
+      state topics on the broker; 6 switch.uno_q_mcu_* entities in HA;
+      toggle_test.sh on switch.uno_q_mcu_uno_q_led3_g -> 6/6 OK
+- [x] Verify matrix path: 0 "stats push failed" log lines; 15 s 4-core
+      `yes` stress raised load avg to 1.08 (bar growth is visual —
+      user can confirm on the board)
+- [x] Reboot persistence config: all three containers
+      restart=unless-stopped; docker + arduino-app-cli services
+      enabled; ha-mcu-bridge registered as default app
+- [x] Reboot test: board rebooted via privileged helper (`systemctl
+      reboot` over SSH is denied). SSH back in ~60 s; all three
+      containers auto-started within seconds; HA answered 200; Z2M
+      bridge republished {"state":"online"}; ha-mcu-bridge auto-started
+      as default app (availability "online"). Post-reboot toggle on
+      switch.uno_q_mcu_uno_q_led3_g: 6/6 OK. Exactly 3 "stats push
+      failed" lines during boot (router not up yet) then 0 — same
+      recovery pattern as the SungwooQ rig. Tapo + Z2M entities all
+      live (dormtapo2 reading 1.4 W).
+
+## 2026-07-27 — HA + Sonoff Dongle Max + Zigbee2MQTT on new network (BLOCKED)
+
+Requested by user. Board reported at 192.168.31.172 (new 192.168.31.x
+network; previous rig lived on 192.168.1.x), login arduino/arduino.
+Plan: install HA per docs/home-assistant-uno-q-guide.md, verify the
+Sonoff Zigbee Dongle Max over USB, run Zigbee2MQTT (docker container —
+HA Container has no add-on store), verify via network checks, and
+research popular community dashboard designs.
+
+- [x] Diagnose SSH connectivity: 192.168.31.172 answers ping
+      (ARP 14:b5:cd:eb:1f:c9 = Liteon wifi module, consistent with the
+      UNO Q) but EVERY probed TCP port (22, 8123, 8080, 1883, 5555 …)
+      is actively refused, and a full /24 sweep found no host with
+      port 22 open. Conclusion: the board is on WiFi but sshd is not
+      running — the guide §10 "fresh image: sshd has no host keys"
+      symptom. No adb device on USB, so remote recovery is impossible.
+- [ ] BLOCKED: re-run guide step 2a over USB (host-key generation +
+      ssh.service start), then steps 3-6 (HA install + onboarding +
+      long-lived token)
+- [ ] BLOCKED: verify Sonoff Dongle Max enumeration (lsusb,
+      /dev/serial/by-id) and Zigbee2MQTT container (adapter: ember)
+      + MQTT integration + network-level verification
+- [x] Research popular dashboard designs — see
+      docs/ha-dashboard-research.md (Dwains / UI Lovelace Minimalist /
+      Mushroom / Bubble Card / theme table + HA-Container HACS notes)
+- [x] Restore the CommonClaude submodule checkout (was empty; ruleset
+      and hooks now present) and file GitHub issue #11 for this session
+
+### Results (2026-07-27, after the user attached the board over USB)
+
+- SSH root cause confirmed on the NEW board (hostname uno-q, adb serial
+  2369462340 — a different unit from SungwooQ): ssh.service inactive
+  AND disabled, zero host keys in /etc/ssh. Fixed via the guide 2a
+  privileged docker helper extended with `systemctl enable ssh`;
+  public key installed over adb; `ssh unoq hostname` -> uno-q with no
+  password. All later work ran over WiFi/SSH only (user unplugged USB
+  to attach a hub).
+- Gotcha (new): scripts scp'd from this Windows checkout carry CRLF
+  and bash rejects them (`set: pipefail: invalid option name`); every
+  script needed `sed -i 's/\r$//'` on the board before running.
+- HA Container 2026.7.3 installed per guide step 3; scripted
+  onboarding (owner arduino) + 10-year token minted (steps 4/6).
+- Disk pressure: HA pull left / at 100 % (36 MB free). With the
+  user's explicit approval (AskUserQuestion) removed unused preloaded
+  images ei-models-runner:0.5.0 (1.31 GB) + influxdb:2.7 (393 MB) ->
+  1.8 GB free (82 %). python-apps-base kept for App Lab apps.
+- Sonoff Dongle Max verified: lsusb shows CP210x (10c4:ea60) behind
+  the user's USB hub; /dev/serial/by-id names it
+  "SONOFF_SONOFF_Dongle_Max_MG24_..." -> /dev/ttyUSB0.
+- Zigbee2MQTT 2.12.1 (koenkk/zigbee2mqtt, host network, by-id device
+  passthrough, adapter: ember) talks to the dongle: coordinator
+  EmberZNet 7.4.5. Verified bridge online on MQTT, permit_join
+  request->response {"status":"ok"} round-trip, HA MQTT integration
+  registered (create_entry, loaded), bridge entities live in HA, and
+  frontend HTTP 200 from the host PC over LAN (:8080). Note: a mid-
+  session dongle unplug killed the container and docker did not
+  auto-restart it (device node missing) — `docker start zigbee2mqtt`
+  after replugging.
+- Tapo re-verified on this network/account: DormTapo1 192.168.31.19
+  (18:69:45:71:0C:49) and DormTapo2 192.168.31.240 (18:69:45:71:05:EC)
+  both KLAP-authenticated via python-kasa, registered in HA
+  (create_entry each). toggle_test.sh switch.dormtapo2 at 5 s:
+  10/10 transitions OK; plug restored to ON; live power readout
+  2.2 W / 218.7 V / 0.02 A confirms energy monitoring.
+- Dashboard recommendation #1 applied without HACS (OAuth is
+  interactive): mushroom.js v5.1.1 + bubble-card.js (dist) downloaded
+  into /config/www/community/, catppuccin.yaml v2.1.3 into
+  /config/themes/, resources + "Mushroom" storage dashboard
+  (url mushroom-home) written into .storage with HA stopped, default
+  theme set to Catppuccin Mocha (dark). Verified: both JS URLs and
+  /mushroom-home return HTTP 200. HACS can be layered on later for
+  updates.
+
 ## 2026-07-13 — WiFi via ADB, Home Assistant on UNO Q, Tapo P110M detection
 
 Requested by user. Target board: Arduino UNO Q "SungwooQ" (Debian 13,
@@ -371,3 +472,144 @@ MIT-convention findings from the review. Behavior must not change.
   ON/OFF over MQTT echoed on the state topic with matching log lines;
   0 "stats push failed" over 3 min. GitHub issue #9, branch
   refactor/bridge-god-class, PR #10.
+
+## 2026-08-25 — Cryptojacking incident on the ComfyUI Docker host
+
+Requested by user: investigate why both GPUs were pinned at 100 %, then
+record the incident on GitHub. Read-only forensic investigation only —
+the user performed the containment (container + port removal) themselves.
+Malicious ComfyUI custom node `champdev-comfyui-nodes` (unauthenticated
+web terminal + file manager + telemetry beacon) installed via the exposed
+ComfyUI-Manager API on 2026-08-23 was the entry point; it relaunched an
+XMRig-style miner as root after the user's container reboot.
+
+- [x] Identify the GPU consumer: host nvidia-smi showed both Quadro
+      RTX 6000 at 100 % / ~250 W with no compute process listed;
+      traced to a hidden `python` process inside the `comfyui`
+      container (cmdline wiped, /proc/<pid>/exe unreadable even as
+      root), outbound C2 to 166.117.41.217:9000 (AWS Global
+      Accelerator front)
+- [x] Find the entry vector: `champdev-comfyui-nodes` in the
+      comfyui-data volume, installed 2026-08-23 03:38 (2 min before the
+      miner started). Source review confirmed unauthenticated routes
+      `/champdev/terminal/ws` (spawns a full PTY shell) and
+      `/champdev/fm/*` (arbitrary file read/write/delete), plus a
+      telemetry beacon to comfy-nodes-telemetry.champdev.in
+- [x] Confirm re-infection after the user's reboot: ComfyUI log showed
+      the champdev terminal reconnecting at 12:17 today; miner PID 759
+      relaunched as root, GPUs back to 100 % — proving the volume-
+      resident node re-loads on every start
+- [x] Verify containment: after the user removed the container and
+      port mapping, GPUs returned to idle (0-1 % / 12-35 W), no C2
+      connection, comfyui container gone
+- [x] Host + lateral-movement sweep (2026-08-23 onward): no host C2
+      connection, no rogue accounts / admin changes, clean Run keys /
+      scheduled tasks / startup folders, no suspicious new executables
+      (only Defender/Plex/VSCode auto-updates), other containers
+      (privileged sungwoo dind, webdav) clean. Infection stayed inside
+      the deleted comfyui container
+- [x] Record the incident as a GitHub issue via `gh` — GitHub issue #13
+      (created after the user re-authenticated; `security` label absent
+      in the repo, filed without a label)
+- [ ] Remaining remediation (not yet executed): remove
+      `champdev-comfyui-nodes` from the comfyui-data volume before any
+      ComfyUI recreation; keep 8188 / ComfyUI-Manager off the public
+      network (VPN or authenticated reverse proxy)
+
+## 2026-09-01 — New board IP + Android phone detection on the UNO Q
+
+Requested by user. Diagnosis this session: the board no longer answers
+at 192.168.31.172; a subnet scan found it at 192.168.31.84 (hostname
+SungwooQ, SSH key auth OK, up 11 days). Task: point the `unoq` SSH
+alias at the new IP, then check whether the Android phone attached to
+the board's USB port is recognized (lsusb / adb on the board).
+(see LP §2, §5)
+
+- [x] Update ~/.ssh/config `unoq` host entry to 192.168.31.84 and
+      verify `ssh unoq` works (also removed a duplicate `unoq` block)
+- [x] Enumerate USB devices on the board (lsusb) and identify the
+      Android phone — NOT enumerated (see results)
+- [x] Check adb-level recognition of the phone from the board — adb is
+      not installed on the board; moot while nothing enumerates
+- [x] Record results below
+
+### Results (2026-09-01)
+
+- `ssh unoq` -> SungwooQ at 192.168.31.84 (DHCP moved it from .172;
+  ARP MAC 14:b5:cd:eb:00:b5). Config had the `unoq` block twice with
+  the stale IP; collapsed to one entry. Suggest a DHCP reservation on
+  the router to stop future drift.
+- Android phone: NOT recognized. Current lsusb shows only the user's
+  hub chain (Terminus hub, Genesys hubs, microSD reader, RTL8153
+  ethernet, a USB-C Video Adaptor billboard device) — no phone-class
+  device (no MTP/ADB/vendor 18d1/04e8-style entry).
+- Kernel log shows something WAS cycling on hub ports 1-1.3.2/1-1.3.3
+  up to ~40 min before the check (board 23:08 UTC): repeated
+  enumerate/disconnect every few seconds as a cdc_acm serial device
+  (ttyACM0), one "device descriptor read/64, error -71" — the classic
+  bad-cable / insufficient-power signature. Silent since; port empty.
+- udev's ID_VENDOR=Arduino / ID_MODEL=Imola record is the board's own
+  DMI identity (UNO Q internal name), not a USB gadget — red herring.
+- Next steps for the user: use a known-good DATA cable (charge-only
+  cables reproduce exactly this), plug the phone directly into the
+  board or a powered hub port, and set the phone's USB mode to File
+  transfer / enable USB debugging. Then re-run lsusb; install adb on
+  the board (`apt install adb`) only once the phone enumerates.
+
+## 2026-09-01 — myhyundai_aircon custom component, stage 0
+
+Requested by user; plan confirmed in chat against
+docs/SPEC-myhyundai-aircon-component.md. Decisions: develop and test
+on the UNO Q board itself; component source lives in this repo under
+a new root `custom_components/` directory and is deployed to the
+board's HA config over scp; the dedicated phone (Galaxy Z Fold3)
+stays attached to the board USB permanently (charging + ADB TCP
+bootstrap host). Before any change, preserve the current on-board
+sources in a backup folder. Implementation follows spec §11 in four
+PRs (skeleton+adb_client / dump+recipe engine / notification+
+entities+guards / docs), with a mandatory stop before spec stages
+5-6 until real-device dumps confirm U3-U8. Note: the phone does not
+currently enumerate on the board USB (see previous entry), so
+phone-side steps wait on the user replacing the cable; code stages
+1-4 need no phone. (see LP §2, §3, §5)
+
+- [x] Back up current on-board sources (/home/arduino/ArduinoApps,
+      HA config /home/arduino/homeassistant) into a dated folder
+      under /home/arduino/backup/ before touching anything
+      (actual paths differ — see results)
+- [x] Identify the adb-shell version pinned by the installed HA
+      container and record it for manifest.json — adb-shell[async]
+      ==0.4.4 (venv install, not container; see results)
+- [x] Set up an on-board test venv (pytest + ruff +
+      pytest-homeassistant-custom-component) for board-side testing
+- [ ] BLOCKED on user cable fix: enumerate the Z Fold3 on board USB,
+      install adb, run `adb tcpip 5555`, record the phone's WiFi IP
+- [ ] BLOCKED on user: U2 gate — MyHyundai app runs normally with
+      USB debugging enabled (project stops if not)
+- [x] Record results below
+
+### Results (2026-09-01)
+
+- Backup: /home/arduino/backup/2026-09-01-pre-myhyundai/ holds
+  ArduinoApps.tar.gz (210 entries), ha_config.tar.gz (45),
+  mosquitto.tar.gz (4), home-scripts.tar.gz (5); all four verified
+  with `tar tzf`. Disk unchanged at 80 % used, 2.0 GB free.
+- Environment surprise: this board (SungwooQ, 192.168.31.84) does
+  NOT run HA Container. HA Core 2026.2.3 runs in a Python 3.13.5
+  venv at /home/arduino/ha_venv as systemd `home-assistant.service`,
+  config /home/arduino/ha_config, port 8123 answering HTTP 200.
+  ArduinoApps holds only led3_ctl (running) and qtest_blank — no
+  ha-mcu-bridge; the container stack described in earlier entries
+  lives on the other unit (uno-q, ex-.172). Component deploy target
+  is therefore /home/arduino/ha_config/custom_components/ and deps
+  install into ha_venv (LP §5 entry added).
+- adb-shell pin: HA 2026.2.3 androidtv manifest requires
+  `adb-shell[async]==0.4.4` -> goes into our manifest.json verbatim.
+- Test venv: /home/arduino/ha_test_venv (746 MB) with
+  pytest-homeassistant-custom-component 0.13.316 (the release whose
+  requires_dist pins homeassistant==2026.2.3, found via PyPI JSON —
+  LP §3 entry added), pytest 9.0.0, ruff 0.16.5,
+  adb-shell[async] 0.4.4. Imports verified on the board.
+- Phone/U2 items remain blocked on the user replacing the USB data
+  cable (phone did not enumerate; see the previous entry's results).
+- GitHub issue #15, branch feature/myhyundai-aircon-stage0.
