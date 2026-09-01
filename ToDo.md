@@ -1067,3 +1067,28 @@ inspection; ha_add_tapo.sh in claude_test/)
 - Theme survey delivered in chat: ① Frosted Glass (~988★)
   ② Graphite (~455★, chosen) ③ Catppuccin, runner-up Material
   You (~466★).
+
+## 2026-09-01 — README update for this session's work
+
+Requested by user ("지금까지 작업한걸 README.md에도 작성해줘").
+Fold the 2026-09-01 session into README.md: the second rig reality
+(SungwooQ runs HA Core in a venv, not the container described so
+far), the vehicle-control path in the architecture diagram, the
+myhyundai_aircon build summary, Tapo re-registration on the venv
+rig, the Graphite theme, and the new hardware gotchas (adb eats
+ssh-streamed scripts; Debian adb vs Arduino android libs).
+
+- [x] Update intro, diagram, "What was built", verified results,
+      and gotchas in README.md
+- [x] PR + merge to main
+- [x] Record results below
+
+### Results (2026-09-01)
+
+- Intro now names both verified HA install styles; the diagram
+  gained the phone → Bluelink → vehicle branch; "What was built"
+  gained the myhyundai_aircon summary (recipes, guards, 46 tests,
+  7 PRs in one day) and the Graphite theme; verified-results table
+  gained the venv-rig Tapo re-registration and theme rows; gotchas
+  gained adb-eats-stdin, the Debian-adb conflict, and the
+  two-rigs-two-layouts warning.
