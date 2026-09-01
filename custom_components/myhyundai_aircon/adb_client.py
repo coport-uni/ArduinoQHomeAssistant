@@ -172,6 +172,37 @@ class AdbClient:
                 raise CannotConnectError(str(err)) from err
         return output or ""
 
+    async def async_pull(self, device_path: str, local_path: str) -> None:
+        """Copy a file from the device to the local filesystem.
+
+        Args:
+            device_path: Absolute path on the Android device.
+            local_path: Destination path on the Home Assistant host.
+
+        Raises:
+            CannotConnectError: If there is no usable session or the
+                transfer fails at the transport level.
+        """
+        if not self._device.available:
+            raise CannotConnectError("ADB session is not connected")
+        async with self._lock:
+            try:
+                await self._device.pull(
+                    device_path,
+                    local_path,
+                    read_timeout_s=SHELL_TIMEOUT_S,
+                )
+            except (
+                adb_exceptions.AdbConnectionError,
+                adb_exceptions.AdbTimeoutError,
+                adb_exceptions.TcpTimeoutException,
+                ConnectionError,
+                OSError,
+                asyncio.TimeoutError,
+            ) as err:
+                await self.async_close()
+                raise CannotConnectError(str(err)) from err
+
     async def async_get_serial(self) -> str:
         """Return the device serial for use as a unique ID.
 
