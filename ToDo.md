@@ -613,3 +613,19 @@ phone-side steps wait on the user replacing the cable; code stages
 - Phone/U2 items remain blocked on the user replacing the USB data
   cable (phone did not enumerate; see the previous entry's results).
 - GitHub issue #15, branch feature/myhyundai-aircon-stage0.
+- Update (same day, user asked for a USB re-check): the phone now
+  enumerates STABLY as 04e8:6860 SAMSUNG_Android (MTP mode) on hub
+  port 1-1.3.2 after ~9 flapping cycles (devices 62-70) settled at
+  device 71. Interfaces exposed: MTP (06), CDC ACM serial (02/0a ->
+  ttyACM0), vendor ff/40 — NO adb interface (ff/42), i.e. USB
+  debugging is OFF on the phone. Board-side adb client installed
+  WITHOUT touching system packages: Debian's adb conflicts with the
+  preinstalled Arduino android-libcutils (…arduino3/7 builds, used
+  by the board's own adbd), and the privileged-helper route was
+  denied, so adb 34.0.5-debian + stock android libs were extracted
+  from .debs into /home/arduino/adb-local/rootfs (run with
+  LD_LIBRARY_PATH=…/rootfs/usr/lib/aarch64-linux-gnu/android).
+  `adb version` OK; `adb devices` empty as expected. Next user
+  action: enable Developer options > USB debugging on the Z Fold3
+  and accept the RSA prompt; then re-run adb devices and
+  `adb tcpip 5555`.
