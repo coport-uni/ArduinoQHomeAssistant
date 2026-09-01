@@ -798,3 +798,36 @@ capture_dump against the real phone. (see LP §3, §5)
   returned 400 because the entry had not finished loading —
   retrying after load succeeded.
 - GitHub issue #19, branch feature/myhyundai-recipe-engine.
+
+## 2026-09-01 — myhyundai_aircon stage 5 gate: fill the recipe from
+## real widget dumps
+
+Requested by user ("진행해줘" after PR #20 merged). Spec §11 stage
+5: wake the phone, capture the home-screen widget with the
+integration's own capture_dump service, read the real node
+identifiers (U3) out of the XML, and fill recipes/default.json with
+them. The spec forbids guessing: only values read from actual dumps
+go in. The confirm-popup steps (U4) and notification texts (U5/U6)
+need one real remote command, which fires the actual car — that
+run is coordinated with the user separately, so await_notification
+keeps its placeholders for now and the sequence stays gated by
+E_RECIPE_INCOMPLETE until then.
+
+- [ ] BLOCKED on user: the phone has a PIN lock screen (spec §12
+      requires none). First wake+dump captured the swipe keyguard;
+      `wm dismiss-keyguard` then raised the PIN bouncer
+      (com.android.systemui pinEntry nodes in the dump), which must
+      not be bypassed. User needs to set 설정 > 잠금화면 > 화면 잠금
+      방식 > 없음 on the dedicated phone, then this gate resumes.
+- [ ] Wake the phone and confirm the widget page is the current
+      home screen, then capture_dump via the HA service
+- [ ] Identify the widget button nodes (켜기/잠금/시작/종료) in the
+      XML: resource-id, text, content-desc, bounds
+- [ ] Fill the aircon_on tap step in recipes/default.json with the
+      real identifier; keep await_notification placeholders until
+      the observed real run
+- [ ] Update/extend unit tests for the filled recipe; all green on
+      the board venv
+- [ ] Deploy + reload_recipe on the board; run_sequence must still
+      refuse with E_RECIPE_INCOMPLETE (notification texts pending)
+- [ ] Record results below
