@@ -865,3 +865,71 @@ E_RECIPE_INCOMPLETE until then.
   aircon command for U4 (popup?) + U5/U6 (notification texts), and
   a logout dump for U8 (login_markers). GitHub issue #21, branch
   feature/myhyundai-recipe-values.
+
+## 2026-09-01 — myhyundai_aircon PR 3: real-command observation +
+## notification + entities + guards (spec §11 stages 6-8)
+
+Requested by user ("나머지도 해보자" after PR #22 merged). Scope:
+(a) one observed real aircon command via the widget — popup check
+(U4), success notification text (U5), then immediately tap 공조
+끄기 to restore state and capture the off text too; (b) fill the
+recipe notification texts, completing the stage-5 gate; (c)
+notification.py (§9.2 failure-first judging over dumpsys
+notification --noredact) wired into the executor's
+await_notification step; (d) switch/sensor/binary_sensor entities
+(§6) with the auto-OFF timer; (e) §5.2 options flow + §9.3 guards
+(cooldown, min gap, battery floor) and retry logic. U6 (failure
+text) cannot be induced remotely; the parser treats it as optional
+data. U8 (login markers) stays open. (see LP §3, §5)
+
+- [x] Observe one real aircon_on via widget tap over ADB: popup
+      yes/no, dumpsys notification success text; then aircon_off
+      tap + its notification text
+- [x] Fill recipes/default.json notification texts (and popup
+      steps if any); sequences become runnable
+- [x] notification.py: package-block extraction tolerant of
+      dumpsys format drift, failure-before-success judging,
+      baseline-keys instead of clear-before-run; executor
+      await_notification wired
+- [ ] switch.py (assumed_state, auto-OFF timer, §6.1 attributes),
+      sensor.py (last_result / last_error / last_notification),
+      binary_sensor.py (connectivity)
+- [ ] Options flow (§5.2) + guards: cooldown, min gap, battery
+      floor, retry_max/retry_gap, dump_on_failure
+- [ ] Unit tests green on the board venv; ruff clean
+- [x] Deploy, restart HA, verify a live run_sequence aircon_on
+      works end-to-end (notification judged) — entity verification
+      moves to the follow-up PR with the entities themselves
+- [ ] Record results below (final results after the entities PR)
+
+### Interim results (2026-09-01, PR 3a: observation + notification)
+
+- Real-command observation (user-approved): tapping 공조 켜기 at
+  (162,819) fired the command with NO confirm popup (U4 = none;
+  post-tap dump shows the plain widget). Result push arrived 21 s
+  later. U5 texts: title "원격제어 결과 안내", body/ticker
+  "공조가 켜졌습니다." The off button observed symmetrically:
+  "공조가 꺼졌습니다." (3 s — vehicle session already warm). U6
+  failure text remains unobserved; failure_contains is an empty
+  list, so a real failure judges as E_TIMEOUT + retry (documented
+  in the recipe description). Gotcha (LP-worthy): piping a script
+  into `ssh bash -s` dies silently when the script calls adb —
+  adb shell EATS the remaining script from stdin; copy the script
+  to the board and run it from a file instead.
+- Notification format on One UI / Android 15: active records are
+  "NotificationRecord(... pkg=... key=...:" blocks whose text
+  lives in tickerText= / android.title=String (...) /
+  android.text=String (...); the archive holds text-less
+  StatusBarNotification lines that can never false-match.
+  notification.py parses per-record blobs keyed by the record key.
+  Spec §9.2's clear-before-run needs permissions ADB lacks, so the
+  executor snapshots the package's record KEYS at sequence start
+  and judges only records that appear afterwards — same intent,
+  no clearing.
+- recipes/default.json is now COMPLETE (no placeholders in the
+  sequences): both sequences runnable.
+- Tests 36/36 green on the board venv; ruff clean.
+- LIVE END-TO-END through Home Assistant: run_sequence aircon_on →
+  HTTP 200 in 31.5 s (wake → home → widget tap → notification
+  judged success); run_sequence aircon_off → HTTP 200 in 10.1 s,
+  vehicle restored. The spec's core mission works.

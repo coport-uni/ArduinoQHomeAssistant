@@ -52,9 +52,7 @@ DEVICE_UI_XML_PATH = "/sdcard/myhyundai_aircon_ui.xml"
 DEVICE_SCREENSHOT_PATH = "/sdcard/myhyundai_aircon_cap.png"
 
 # Error codes from spec §9.3, plus E_UNKNOWN_SEQUENCE for a
-# run_sequence call naming a key the recipe does not define and
-# E_NOT_IMPLEMENTED for the await_notification step until the
-# notification stage lands.
+# run_sequence call naming a key the recipe does not define.
 ERR_RECIPE_INCOMPLETE = "E_RECIPE_INCOMPLETE"
 ERR_COOLDOWN = "E_COOLDOWN"
 ERR_MIN_GAP = "E_MIN_GAP"
@@ -66,4 +64,3 @@ ERR_UNKNOWN_SCREEN = "E_UNKNOWN_SCREEN"
 ERR_TIMEOUT = "E_TIMEOUT"
 ERR_VEHICLE_FAIL = "E_VEHICLE_FAIL"
 ERR_UNKNOWN_SEQUENCE = "E_UNKNOWN_SEQUENCE"
-ERR_NOT_IMPLEMENTED = "E_NOT_IMPLEMENTED"
