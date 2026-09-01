@@ -204,6 +204,10 @@ class SequenceExecutor:
         # these (see notification.py for why this replaces clearing).
         self._notification_baseline: set[str] = set()
         self.last_notification_text = ""
+        # Toggled from options (§5.2 screen_check_enabled); when
+        # off, assert_screen steps pass without touching the device.
+        self.screen_check_enabled = True
+        self.last_screen_checked = ""
 
     async def async_run_sequence(self, name: str) -> dict[str, Any]:
         """Run one named sequence to completion.
@@ -418,6 +422,8 @@ class SequenceExecutor:
 
     async def _step_assert_screen(self) -> None:
         """Compare the live resolution against the baseline."""
+        if not self.screen_check_enabled:
+            return
         expected = self.recipe.baseline_screen
         if expected == "AUTO":
             expected = self._baseline_screen
@@ -425,6 +431,7 @@ class SequenceExecutor:
             current = await self._client.async_get_screen_size()
         except AdbClientError as err:
             raise SequenceError(ERR_DEVICE_OFFLINE, str(err)) from err
+        self.last_screen_checked = current
         if current != expected:
             raise SequenceError(
                 ERR_SCREEN_MISMATCH,

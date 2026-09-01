@@ -891,12 +891,12 @@ data. U8 (login markers) stays open. (see LP §3, §5)
       dumpsys format drift, failure-before-success judging,
       baseline-keys instead of clear-before-run; executor
       await_notification wired
-- [ ] switch.py (assumed_state, auto-OFF timer, §6.1 attributes),
+- [x] switch.py (assumed_state, auto-OFF timer, §6.1 attributes),
       sensor.py (last_result / last_error / last_notification),
       binary_sensor.py (connectivity)
-- [ ] Options flow (§5.2) + guards: cooldown, min gap, battery
+- [x] Options flow (§5.2) + guards: cooldown, min gap, battery
       floor, retry_max/retry_gap, dump_on_failure
-- [ ] Unit tests green on the board venv; ruff clean
+- [x] Unit tests green on the board venv; ruff clean — 46 passed
 - [x] Deploy, restart HA, verify a live run_sequence aircon_on
       works end-to-end (notification judged) — entity verification
       moves to the follow-up PR with the entities themselves
@@ -933,3 +933,35 @@ data. U8 (login markers) stays open. (see LP §3, §5)
   HTTP 200 in 31.5 s (wake → home → widget tap → notification
   judged success); run_sequence aircon_off → HTTP 200 in 10.1 s,
   vehicle restored. The spec's core mission works.
+
+### Final results (2026-09-01, PR 3b: entities + guards)
+
+- Coordinator now orchestrates runs: §9 guards (min gap, cooldown
+  after success, battery floor via a configurable sensor entity),
+  §9.3 retry ladder (E_TIMEOUT -> am force-stop + retry,
+  E_VEHICLE_FAIL -> retry_gap wait + retry, up to retry_max),
+  whole-sequence asyncio.timeout, dump-on-failure hook, last-run
+  state for the entities, and the §9.4 result event on success and
+  failure. run_sequence routes through it (ignore_guards honored).
+- Entities land with exactly the spec §6 IDs: switch.myhyundai_
+  aircon (assumed_state, §6.1 attributes, auto-OFF timer via
+  async_call_later — the timer callback needed @callback, caught
+  by a thread-safety RuntimeError in the board test run),
+  sensor.myhyundai_last_result / last_error / last_notification,
+  binary_sensor.myhyundai_device_connected (stays available so OFF
+  is visible).
+- Options flow exposes the §5.2 tuning values (the notification
+  wait limit stays recipe-side — documented deviation); options
+  changes reload the entry. strings + en/ko translations updated.
+- Tests: 46/46 on the board venv (guards, retries, event payload,
+  switch auto-off via time jump); ruff clean.
+- LIVE full-stack verification on the real car: switch.turn_on ->
+  32.5 s, state on, expires_at ~+10 min, screen_checked 840x2289,
+  sensors success + "공조가 켜졌습니다."; after the 60 s cooldown,
+  switch.turn_off -> 10.4 s, state off, expires_at cleared,
+  "공조가 꺼졌습니다.". Design note: the cooldown guard also
+  blocks turn_off right after turn_on (60 s default) — spec-
+  faithful; revisit if it bothers the user in practice.
+- Remaining project work: docs PR (README, §12 device-prep table,
+  HACS shape) and the open observations U6 (failure text) + U8
+  (login markers), both fillable later via recipe edits alone.

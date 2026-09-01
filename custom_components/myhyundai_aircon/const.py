@@ -24,6 +24,31 @@ RECONNECT_BACKOFF_S = (5, 15, 45, 60)
 CONF_RECIPE_FILE = "recipe_file"
 DEFAULT_RECIPE_FILE = "default.json"
 
+# Options-flow keys and defaults (spec §5.2). The notification wait
+# limit lives in the recipe's await_notification steps, so it is
+# not duplicated as an option.
+CONF_AIRCON_MAX_MINUTES = "aircon_max_minutes"
+CONF_BATTERY_FLOOR_PCT = "battery_floor_pct"
+CONF_BATTERY_SENSOR = "battery_sensor"
+CONF_COMMAND_MIN_GAP_SEC = "command_min_gap_sec"
+CONF_COOLDOWN_SEC = "cooldown_sec"
+CONF_DUMP_ON_FAILURE = "dump_on_failure"
+CONF_RETRY_GAP_SEC = "retry_gap_sec"
+CONF_RETRY_MAX = "retry_max"
+CONF_SCREEN_CHECK_ENABLED = "screen_check_enabled"
+CONF_SEQUENCE_TIMEOUT_SEC = "sequence_timeout_sec"
+
+DEFAULT_AIRCON_MAX_MINUTES = 10
+DEFAULT_BATTERY_FLOOR_PCT = 40
+DEFAULT_COMMAND_MIN_GAP_SEC = 3
+DEFAULT_COOLDOWN_SEC = 60
+DEFAULT_RETRY_GAP_SEC = 30
+DEFAULT_RETRY_MAX = 2
+DEFAULT_SEQUENCE_TIMEOUT_SEC = 90
+
+SEQUENCE_AIRCON_OFF = "aircon_off"
+SEQUENCE_AIRCON_ON = "aircon_on"
+
 # Any string value still carrying this marker means the recipe has
 # not been filled in from real-device dumps yet (spec §8.5).
 PLACEHOLDER_MARKER = "_PLACEHOLDER"

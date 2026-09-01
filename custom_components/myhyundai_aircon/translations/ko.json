@@ -20,5 +20,25 @@
     "abort": {
       "already_configured": "이 안드로이드 기기는 이미 등록되어 있습니다."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "마이현대 공조 세부 설정",
+        "data": {
+          "recipe_file": "레시피 파일명",
+          "battery_sensor": "차량 배터리 센서 (선택)",
+          "battery_floor_pct": "이 배터리 % 미만이면 실행 차단",
+          "command_min_gap_sec": "명령 간 최소 간격 (초)",
+          "cooldown_sec": "실행 후 쿨다운 (초)",
+          "aircon_max_minutes": "자동 OFF 시간 (분, 차량 최대 유지)",
+          "sequence_timeout_sec": "전체 시퀀스 제한 시간 (초)",
+          "retry_max": "최대 재시도 횟수",
+          "retry_gap_sec": "재시도 간격 (초)",
+          "screen_check_enabled": "실행 전 해상도 검증",
+          "dump_on_failure": "실패 시 UI 덤프 저장"
+        }
+      }
+    }
   }
 }
