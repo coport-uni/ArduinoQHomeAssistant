@@ -582,10 +582,14 @@ phone-side steps wait on the user replacing the cable; code stages
       ==0.4.4 (venv install, not container; see results)
 - [x] Set up an on-board test venv (pytest + ruff +
       pytest-homeassistant-custom-component) for board-side testing
-- [ ] BLOCKED on user cable fix: enumerate the Z Fold3 on board USB,
+- [x] BLOCKED on user cable fix: enumerate the Z Fold3 on board USB,
       install adb, run `adb tcpip 5555`, record the phone's WiFi IP
+      — done after the user enabled USB debugging; phone WiFi IP
+      192.168.31.113 (needs DHCP reservation)
 - [ ] BLOCKED on user: U2 gate — MyHyundai app runs normally with
-      USB debugging enabled (project stops if not)
+      USB debugging enabled (project stops if not) — STRONG POSITIVE
+      partial: widget renders live vehicle data with debugging on;
+      full gate needs one real remote command (user)
 - [x] Record results below
 
 ### Results (2026-09-01)
@@ -629,3 +633,24 @@ phone-side steps wait on the user replacing the cable; code stages
   action: enable Developer options > USB debugging on the Z Fold3
   and accept the RSA prompt; then re-run adb devices and
   `adb tcpip 5555`.
+- Update 2 (same day, user enabled USB debugging): full ADB chain
+  verified end-to-end. Fixes on the way: `arduino` added to the
+  plugdev group (adb reported "no permissions"); `sg plugdev` strips
+  LD_LIBRARY_PATH (setgid secure-execution), so it must be exported
+  inside the sg command string. Phone authorized: SM-F926N
+  (Z Fold3, Android 15), serial R3CR80H1GBN, cover screen
+  `wm size` Physical 832x2268 with Override 840x2289 — screencap
+  returns 840x2289, so the executor must prefer the override size
+  for coordinate math. WiFi IP 192.168.31.113/24 (DHCP reservation
+  still recommended). `adb tcpip 5555` + `adb connect
+  192.168.31.113:5555` + TCP shell all OK — the exact transport the
+  HA component will use. `com.hyundai.oneapp.kr` is installed.
+  Bonus screenshot over TCP captured the HOME SCREEN WIDGET on the
+  cover display: "캐스퍼 Electric", refreshed 08:23, 98 % / 386 km,
+  four buttons labeled 켜기 / 잠금 / 시작 / 종료 — U9 (cover-screen
+  rendering) answered YES, and the widget button layout for the
+  aircon_on recipe is now known (text labels exist for tap_node
+  matching). U2 is a strong partial positive (live vehicle data
+  loads with debugging on); the full gate still needs one real
+  remote command observed by the user. Screenshot kept off-repo
+  (board ~/u2test.png) — car/account privacy.
