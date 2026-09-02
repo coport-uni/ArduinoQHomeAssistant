@@ -1,10 +1,15 @@
 # Turn LED4 into an indicator of which WiFi the phone is on.
 #
-# Blue is the dorm access point, green is the other known network, and
-# red means neither. Red deliberately covers having no WiFi at all --
-# being away from both places usually shows up as LTE-only rather than
-# as a third SSID, so treating unavailable/unknown as "no known
-# network" is what makes the indicator useful.
+# Blue is the dorm access point, green is either of the other two
+# regular networks, and red means none of them. Red deliberately
+# covers having no WiFi at all -- being away from all three places
+# usually shows up as LTE-only rather than as a fourth SSID, so
+# treating unavailable/unknown as "no known network" is what makes the
+# indicator useful.
+#
+# Red therefore lights exactly when away-car-aircon.yaml is counting
+# down to starting the vehicle, so the two files share the same list
+# of known networks and have to be edited together.
 #
 # The SSID comes from the Home Assistant companion app on the phone; it
 # reports "<not connected>" when WiFi is off, which falls into the same
@@ -13,8 +18,8 @@
 # Install with claude_test/ha_add_automation.py.
 alias: Phone WiFi state on LED4
 description: >-
-  LED4 is blue on XiaomiDorm55, green on TP-Link_0624, and red on any
-  other network or on no WiFi at all.
+  LED4 is blue on XiaomiDorm55, green on TP-Link_0624 or WUNIST_AAA,
+  and red on any other network or on no WiFi at all.
 mode: single
 
 triggers:
@@ -51,11 +56,14 @@ actions:
             data:
               rgb_color: [0, 0, 255]
               brightness: 255
-      - alias: On the other known WiFi
+      - alias: On one of the other regular networks
         conditions:
+          # A state condition matches any value in the list.
           - condition: state
             entity_id: sensor.sm_f966n_wi_fi_connection
-            state: "TP-Link_0624"
+            state:
+              - "TP-Link_0624"
+              - "WUNIST_AAA"
         sequence:
           - action: light.turn_on
             target:

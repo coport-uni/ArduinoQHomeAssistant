@@ -596,15 +596,20 @@ The automation itself colours LED4 by SSID:
 | SSID | LED4 |
 |---|---|
 | `XiaomiDorm55` | blue |
-| `TP-Link_0624` | green |
+| `TP-Link_0624`, `WUNIST_AAA` | green |
 | anything else | red |
 
-Red is the `default:` branch of the `choose`, so it also covers
-`<not connected>`, `unavailable`, and `unknown` -- being away from
-both known networks usually means no WiFi at all rather than a third
-SSID, and "no known network" is exactly what the indicator should
-show then. Adding a network is one more `choose` branch; the default
-needs no touching.
+A `condition: state` matches any value in a list, so the two green
+networks share one `choose` branch. Red is the `default:` branch, so
+it also covers `<not connected>`, `unavailable`, and `unknown` --
+being away from all three places usually means no WiFi at all rather
+than a fourth SSID, and "no known network" is exactly what the
+indicator should show then. Adding a network is one more list entry
+or one more branch; the default never needs touching.
+
+Red therefore lights precisely when §9h's automation starts counting
+down to the car, which is the point of keeping the two lists the
+same.
 
 It has three triggers, and the third is the non-obvious one:
 
@@ -666,9 +671,10 @@ Four things in those five lines are load-bearing:
   departure.
 
 The list is duplicated in `phone-wifi-led4.yaml`, which colours LED4
-from the same sensor. YAML has no constants, and hiding it behind a
-helper entity buys less than it costs — but the two files have to be
-edited together.
+from the same sensor and shows red for exactly this set. YAML has no
+constants, and hiding the list behind a helper entity buys less than
+it costs — but the two files have to be edited together, and a red
+LED is the visible check that they still agree.
 
 **Testing an automation whose action is a real vehicle.** Do not fire
 it and watch. Install `claude_test/away_trigger_probe.yaml` first: it

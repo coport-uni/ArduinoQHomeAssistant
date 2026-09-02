@@ -1674,3 +1674,34 @@ leave with the user.
 - The known-network list is duplicated between the two automation
   files. YAML has no constants and a helper entity buys less than it
   costs, but the files must be edited together -- noted in both.
+
+
+## 2026-09-02 — Give WUNIST_AAA the same LED colour as TP-Link_0624
+
+Requested by user ("에도 tp link랑 같은 색을 할당하자"), closing the
+mismatch flagged when the aircon automation shipped: the LED knew two
+networks while the aircon automation knew three, so sitting at the lab
+showed red even though the car was not being armed.
+
+- [x] Add `WUNIST_AAA` to the green branch (a `condition: state`
+      matches any value in a list, so it is one branch, not two)
+- [x] Reinstall and walk all four states on hardware
+- [x] Update the guide table, the duplication note and the README
+
+### Results (2026-09-02)
+
+- All four states walked on the board and confirmed on camera:
+  `XiaomiDorm55` -> `(0, 0, 255)`, `TP-Link_0624` -> `(0, 255, 0)`,
+  `WUNIST_AAA` -> `(0, 255, 0)`, `CafeWiFi` -> `(255, 0, 0)`, then
+  back to the real `WUNIST_AAA` -> green.
+- The `CafeWiFi` step armed the aircon automation's two-minute
+  countdown; switching back within seconds cancelled it, and
+  `switch.myhyundai_aircon` is still off with `last_triggered` None --
+  an unplanned but welcome second demonstration of the debounce.
+- Red now lights exactly for the set that arms the car, so the LED is
+  a visible check that the two automations' network lists still agree.
+  Both files carry a comment saying they must be edited together.
+- Committed onto feature/away-car-aircon and PR #48 rather than a new
+  branch: that PR is what introduced the three-network list, so the
+  LED catching up belongs with it.
+
