@@ -8,6 +8,8 @@
 # sync with apps/ha-automations/phone-wifi-led4.yaml, which colours
 # LED4 from the same sensor. YAML has no constants, so the list is
 # duplicated on purpose rather than hidden behind a helper entity.
+# The first three are the dorm's own SSIDs; being on any of them is
+# being at the dorm, so none of them may arm the car.
 #
 # Two exclusions in that list are not networks at all. `unavailable`
 # and `unknown` mean the companion app stopped reporting -- phone off,
@@ -32,7 +34,8 @@ triggers:
   - trigger: template
     value_template: >-
       {{ states('sensor.sm_f966n_wi_fi_connection') not in
-         ['XiaomiDorm55', 'TP-Link_0624', 'WUNIST_AAA',
+         ['XiaomiDorm55', 'ASUS_55', 'ASUS_55_24',
+          'TP-Link_0624', 'WUNIST_AAA',
           'unavailable', 'unknown'] }}
     for: "00:02:00"
 

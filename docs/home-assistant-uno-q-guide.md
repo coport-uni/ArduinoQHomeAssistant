@@ -595,9 +595,13 @@ The automation itself colours LED4 by SSID:
 
 | SSID | LED4 |
 |---|---|
-| `XiaomiDorm55` | blue |
+| `XiaomiDorm55`, `ASUS_55`, `ASUS_55_24` | blue |
 | `TP-Link_0624`, `WUNIST_AAA` | green |
 | anything else | red |
+
+The dorm publishes three SSIDs — the `ASUS_55` pair is one router's
+5 GHz and 2.4 GHz radios — and the phone picks between them on its
+own, so all three have to mean the same place.
 
 A `condition: state` matches any value in a list, so the two green
 networks share one `choose` branch. Red is the `default:` branch, so
@@ -647,17 +651,23 @@ triggers:
   - trigger: template
     value_template: >-
       {{ states('sensor.sm_f966n_wi_fi_connection') not in
-         ['XiaomiDorm55', 'TP-Link_0624', 'WUNIST_AAA',
+         ['XiaomiDorm55', 'ASUS_55', 'ASUS_55_24',
+          'TP-Link_0624', 'WUNIST_AAA',
           'unavailable', 'unknown'] }}
     for: "00:02:00"
 ```
 
 Four things in those five lines are load-bearing:
 
-- **Every place the user normally is belongs in the list.** The
-  obvious version -- "not the home network" -- fires every time they
-  arrive at work. Check the recorder for where the phone actually
-  spends its day before choosing the list.
+- **Every place the user normally is belongs in the list, and every
+  SSID that place publishes.** The obvious version -- "not the home
+  network" -- fires every time they arrive at work; the subtler one
+  misses that a single location can hand out several SSIDs (the dorm
+  has three, one of them a dual-band pair), and the phone roams
+  between them unprompted. Check the recorder for where the phone
+  actually spends its day, and add every SSID of each place.
+  Matching is exact-string, so a near-miss like `ASUS_5` counts as an
+  unknown network.
 - **`unavailable` and `unknown` are in the list on purpose.** They
   mean the companion app stopped reporting (phone off, app killed, HA
   restarting), not that the phone went anywhere. A car must not start

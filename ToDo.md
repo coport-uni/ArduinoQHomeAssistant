@@ -1705,3 +1705,36 @@ showed red even though the car was not being armed.
   branch: that PR is what introduced the three-network list, so the
   LED catching up belongs with it.
 
+
+## 2026-09-02 — Add the two ASUS dorm SSIDs to the blue branch
+
+Requested by user ("그리고 ASUS_55랑 ASUS_55_24 와이파이도 파랑에
+추가해줘"). The dorm publishes three SSIDs, not one -- the ASUS pair
+is a single router's 5 GHz and 2.4 GHz radios -- and the phone roams
+between them on its own.
+
+- [x] Add both to the LED's blue branch
+- [x] Add both to the aircon automation's known-network list as well,
+      which was not asked for but is required: leaving them out would
+      have armed the car while the LED showed blue, breaking the
+      invariant established one task earlier that red lights exactly
+      when the car is counting down
+- [x] Reinstall both automations and walk every SSID on hardware
+- [x] Update the guide table, the §9h snippet and the README
+
+### Results (2026-09-02)
+
+- LED4 walked across all six SSIDs on the board: `XiaomiDorm55`,
+  `ASUS_55` and `ASUS_55_24` -> blue; `TP-Link_0624` and
+  `WUNIST_AAA` -> green; `CafeWiFi` -> red; back to the real
+  `WUNIST_AAA` -> green.
+- Aircon truth table re-evaluated by HA's template engine and it
+  agrees on every one of them: only `<not connected>` and `CafeWiFi`
+  arm the car. `unavailable` and `unknown` still do not.
+- Deliberate near-miss in that run: `ASUS_5` reads as an unknown
+  network, confirming the test is exact-string membership rather than
+  a prefix match. Worth knowing before someone adds an SSID by
+  shortening another.
+- `switch.myhyundai_aircon` still off throughout; no live vehicle
+  command has been issued at any point.
+

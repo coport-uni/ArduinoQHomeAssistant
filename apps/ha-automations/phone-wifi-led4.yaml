@@ -1,11 +1,11 @@
 # Turn LED4 into an indicator of which WiFi the phone is on.
 #
-# Blue is the dorm access point, green is either of the other two
-# regular networks, and red means none of them. Red deliberately
-# covers having no WiFi at all -- being away from all three places
-# usually shows up as LTE-only rather than as a fourth SSID, so
-# treating unavailable/unknown as "no known network" is what makes the
-# indicator useful.
+# Blue is the dorm, which publishes three SSIDs; green is either of
+# the other two regular networks; red means none of them. Red
+# deliberately covers having no WiFi at all -- being away from all
+# three places usually shows up as LTE-only rather than as an unknown
+# SSID, so treating unavailable/unknown as "no known network" is what
+# makes the indicator useful.
 #
 # Red therefore lights exactly when away-car-aircon.yaml is counting
 # down to starting the vehicle, so the two files share the same list
@@ -18,8 +18,8 @@
 # Install with claude_test/ha_add_automation.py.
 alias: Phone WiFi state on LED4
 description: >-
-  LED4 is blue on XiaomiDorm55, green on TP-Link_0624 or WUNIST_AAA,
-  and red on any other network or on no WiFi at all.
+  LED4 is blue on any of the dorm SSIDs, green on TP-Link_0624 or
+  WUNIST_AAA, and red on any other network or on no WiFi at all.
 mode: single
 
 triggers:
@@ -44,11 +44,17 @@ conditions: []
 
 actions:
   - choose:
-      - alias: On the dorm WiFi
+      - alias: On any of the dorm WiFis
         conditions:
+          # The dorm publishes three SSIDs (the ASUS pair is one
+          # router's 5 GHz and 2.4 GHz radios), and the phone picks
+          # between them on its own, so all three mean "at the dorm".
           - condition: state
             entity_id: sensor.sm_f966n_wi_fi_connection
-            state: "XiaomiDorm55"
+            state:
+              - "XiaomiDorm55"
+              - "ASUS_55"
+              - "ASUS_55_24"
         sequence:
           - action: light.turn_on
             target:
