@@ -1316,3 +1316,104 @@ apply) and recovered to 374 km on the next 3-minute cycle —
 cosmetic, self-healing, worth a guard tweak only if it recurs.
 Password is `arduino` again; user advised to change it in the UI
 and hand over a token if they want API work to keep working.
+
+## 2026-09-02 — Full built-in LED control from Home Assistant
+
+Requested by user ("아두이노 우노 Q에 내장된 led의 종류를 파악하고
+이를 홈 어시스턴트에서 제어할 수 있도록 설정해줘"). Investigation
+first: the live rig exposes only LED3, as 8 on/off colours, through a
+template light -> shell_command -> led3_ctl App Lab app whose Bridge
+RPC is `set_rgb(bool, bool, bool)` — brightness and every non-primary
+colour are silently discarded. The Zephyr devicetree
+(`firmwares/zephyr-arduino_uno_q_stm32u585xx.dts`) shows LED3's three
+channels ARE mapped to TIM5 PWM at 500 Hz with inverted polarity, so
+true 24-bit colour plus brightness is available through
+`analogWrite()` and is simply unused today.
+
+LED inventory (devicetree /leds node + /sys/class/leds):
+
+| LED | Pins | Capability |
+|---|---|---|
+| LED3 R/G/B | PH10/PH11/PH12, active-low | PWM (pwm5 ch1-3) — full colour + brightness |
+| LED4 R/G/B | PH13/PH14/PH15, active-low | GPIO only — 8 colours |
+| 8x13 blue matrix (104 LEDs) | matrixBegin/matrixWrite | pixel on/off, no brightness |
+| red/green/blue:user, blue:bt, green:wlan, red:panic | Linux `/sys/class/leds` | on/off (max_brightness=1), physical presence unverified |
+
+User decisions: MQTT Discovery transport (replacing the HTTP +
+template light path); expose LED3 (PWM full colour + brightness) and
+LED4 (8-colour light); do NOT expose the matrix or the Linux LEDs;
+KEEP the existing CPU/memory bar display on the matrix unchanged.
+(see LP §3, §5)
+
+- [x] Live-verify `analogWrite()` on LED3 (PH10-12) — the pins are
+      claimed by the gpio-leds driver, so confirm PWM re-configures
+      them; fall back to software PWM in the sketch if it does not
+- [x] Sketch: add `set_led3_rgb(int, int, int)` (PWM, 0-255 per
+      channel) and `set_led4_rgb(bool, bool, bool)`; keep
+      `set_pin_by_name` and `show_load` (matrix bars) untouched
+- [x] Python bridge: replace the six per-channel MQTT switches with
+      two MQTT Discovery lights — `unoq_led3` (JSON schema, rgb +
+      brightness) and `unoq_led4` (JSON schema, rgb quantized to the
+      8 reachable colours); retained state topics + availability
+- [x] Restore the MQTT broker: mosquitto container from
+      `apps/mosquitto/mosquitto.conf`, then register the HA MQTT
+      integration with `claude_test/ha_add_mqtt.sh`
+- [x] Unit tests under `tests/` for the colour/brightness -> duty
+      mapping and the LED4 quantization; ruff clean
+- [x] Deploy: start `ha-mcu-bridge` (this stops `led3_ctl` — only one
+      App Lab app runs at a time and the MCU is re-flashed), set it as
+      the default app, remove the now-dead `light:` template and
+      `shell_command:` blocks from configuration.yaml (backup first),
+      restart HA
+- [x] Verify end to end from the HA API: LED3 arbitrary colour, LED3
+      brightness sweep, LED4 colours, matrix bars still running
+- [x] Update README.md and docs/home-assistant-uno-q-guide.md; append
+      any new lesson to LearnedPatterns.md
+- [x] Record results below
+
+### Results (2026-09-02)
+
+- PWM on LED3 CONFIRMED on hardware, but only after a false negative
+  that mattered: the first breathing sweep showed nothing at all, and
+  the cause was the probe's own `/gpio` call earlier in that MCU
+  session. `analogWrite()` never re-applies pinctrl, so one
+  `pinMode`/`digitalWrite` leaves the pad in GPIO mode for good. After
+  re-flashing with no GPIO call, the same sweep was smooth. The
+  production sketch therefore drops LED3 from `kPins` entirely and
+  initialises it with `analogWrite(0)`.
+- Two dead ends recorded so they are not retried: `pwm_pin_index()`
+  cannot be called from a sketch (GCC inlines it into `analogWrite`;
+  no symbol in `core.a`), and `syms-dynamic.ld` exports no PWM symbols
+  — irrelevant, since Zephyr reaches the driver through the device API
+  pointer. The mapping was confirmed statically instead: `LED_BUILTIN`
+  = 50 (`gpioh 0xa` in `digital-pin-gpios`), and `gpioh 0xa/b/c` are
+  entries 6/7/8 of `pwm-pin-gpios` → pwm5 ch1-3, 500 Hz, inverted
+  polarity (so 255 = full brightness).
+- Entities: `light.uno_q_mcu_led3` (rgb + brightness) and
+  `light.uno_q_mcu_led4` (rgb, quantized) discovered automatically;
+  both report real state — `assumed_state` is gone, unlike the
+  template light they replace. Duty values verified from the bridge
+  log: magenta @ brightness 64 → `(64, 0, 64)`, full green →
+  `(0, 255, 0)`, LED4 red → `(255, 0, 0)`, LED4 red @ brightness 100 →
+  `(0, 0, 0)` (quantization is the only dimming a GPIO-only LED has).
+- Visually confirmed by the user on the real board: LED3 sweeps
+  brightness smoothly under HA control, LED4 cycles all seven lit
+  colours.
+- Broker restored (`eclipse-mosquitto:2`, host network, 127.0.0.1 +
+  172.17.0.1 listeners) and the HA MQTT integration re-registered
+  (`create_entry`, state loaded). `ha-mcu-bridge` set as the default
+  App Lab app so it survives reboots; the matrix CPU/memory bars are
+  running again with zero `stats push failed` entries in the log.
+- Old path retired: `light:` template and `shell_command:` removed
+  from configuration.yaml (backup `configuration.yaml.bak-20260902`),
+  config validated, HA restarted, and the orphaned
+  `light.led3_rgb` registry entry deleted.
+- Tests: 67 passed on the board venv (57 existing + 10 new for the
+  colour mapping); ruff clean. GitHub issue #40, branch
+  feature/unoq-led-mqtt-lights.
+- NOT done, by user scope decision: the 8x13 matrix and the Linux
+  `/sys/class/leds` devices are still not exposed to HA. The six
+  Linux LED class devices remain unverified as physical LEDs on this
+  board — they report `max_brightness=1` and were never lit for a
+  visual check.
+

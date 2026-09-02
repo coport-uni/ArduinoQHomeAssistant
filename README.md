@@ -9,9 +9,12 @@ a single **Arduino UNO Q** board:
 - Two **TP-Link Tapo P110M** smart plugs are discovered, registered, and
   controlled through Home Assistant, including live power monitoring
   (re-verified from scratch on the venv rig).
-- The board's own **STM32U585 MCU pins** (on-board RGB LEDs, optionally
-  header pins D2–D13) appear in Home Assistant as switches, wired
-  through MQTT and the UNO Q's internal Linux↔MCU RPC bridge.
+- The board's own **on-board RGB user LEDs** appear in Home Assistant as
+  dimmable lights, wired through MQTT and the UNO Q's internal
+  Linux↔MCU RPC bridge. **LED3 gets true 24-bit colour and brightness** —
+  its three channels sit on TIM5 PWM channels, which the stock
+  `digitalWrite` path had been throwing away. Header pins D2–D13 remain
+  available as opt-in switches.
 - A **real Hyundai vehicle's remote climate** is switched from Home
   Assistant via the `myhyundai_aircon` custom component, which drives
   the MyHyundai app widget on a dedicated Android phone over ADB
@@ -71,7 +74,7 @@ Two consequences that surprise R4 users most:
 │              (python, paho-mqtt) ── Bridge RPC ──► sketch     │
 │                                    (arduino-router) │         │
 │                                                     ▼         │
-│                                        RGB LEDs / D2–D13 pins │
+│                              RGB LEDs (PWM) / D2–D13 pins    │
 └───────────────────────────────────────────────────────────────┘
           │ WiFi
           ├──► 2× Tapo P110M smart plugs   (tplink, KLAP auth)
@@ -95,10 +98,19 @@ Two consequences that surprise R4 users most:
 - Tapo P110M plugs detected two independent ways (python-kasa subnet
   probe + HA tplink discovery), then registered with KLAP credentials.
   Full entity sets including voltage/current/energy sensors.
-- `apps/ha-mcu-bridge/`: App Lab app exposing MCU pins to HA as MQTT
-  switches with automatic discovery (no HA YAML edits). Defaults to the
-  six on-board RGB LED channels; header pins are opt-in in
+- `apps/ha-mcu-bridge/`: App Lab app exposing the on-board LEDs to HA
+  as MQTT JSON lights with automatic discovery (no HA YAML edits).
+  `light.uno_q_mcu_led3` is a full RGB + brightness light;
+  `light.uno_q_mcu_led4` is GPIO-only, so its colour is quantized to
+  the eight reachable on/off combinations. Header pins are opt-in in
   `python/main.py` `PIN_CONFIG` for safety.
+- **Real PWM on LED3, found in the devicetree**: `pwm-pin-gpios` maps
+  PH10/11/12 to pwm5 channels 1-3 at 500 Hz with inverted polarity
+  (which cancels the active-low wiring, so 255 is full brightness).
+  The catch, verified on hardware: `analogWrite()` never re-applies
+  pinctrl, so a single `pinMode`/`digitalWrite` on one of those pads
+  kills its PWM until the MCU resets — the sketch therefore drives
+  LED3 exclusively through `analogWrite`.
 - The same app renders the Linux side's live CPU/memory load as bars
   on the on-board 8x13 LED matrix (psutil sampling every 2 s, pushed
   to the sketch over Bridge RPC; CPU on 2 rows, MEM on 3).
@@ -140,7 +152,9 @@ Two consequences that surprise R4 users most:
 | Tapo detection (network + HA discovery) | 2/2 plugs found, methods agree |
 | Tapo registration in HA | Both plugs, full entity sets, live 7.3 W load reading |
 | Tapo relay toggle via HA, 3 s cadence | 6/6 transitions OK, ~1 s latency |
-| MCU LED toggle via HA → MQTT → RPC, 3 s cadence | 6/6 transitions OK, LED visibly blinking |
+| LED3 colour + brightness via HA → MQTT → RPC | Smooth brightness sweep confirmed on hardware; duty values match the mapping exactly (magenta @ brightness 64 → `(64, 0, 64)`, full green → `(0, 255, 0)`) |
+| LED4 colour cycling via HA | All seven lit combinations visible in sequence; brightness 100 correctly collapses red to off, since quantization is the only dimming a GPIO-only LED has |
+| PWM-vs-GPIO pad conflict on LED3 | Reproduced both ways: no breathing at all after a `digitalWrite` on the pad, smooth breathing after a re-flash with the GPIO call removed |
 | System-load bars on the 8x13 LED matrix | Idle: CPU 1-2 cols, MEM ~5 cols (~35 %); 4-core `yes` stress grows the CPU bar and it shrinks back; HA switches keep passing 6/6 concurrently |
 | Vehicle aircon via `switch.myhyundai_aircon` (real Casper Electric) | ON judged success in ~32 s, OFF in ~10 s; result read from the app's push notification; 57/57 unit tests on the board |
 | Vehicle telemetry from the widget scrape | Live on the real car: battery 93 %, range 367 km, doors locked, data timestamp matching the widget exactly, app version 1.5.1 |
@@ -159,7 +173,7 @@ Two consequences that surprise R4 users most:
 | `docs/SPEC-myhyundai-aircon-component.md` | The development spec the component was built against |
 | `custom_components/myhyundai_aircon/` | HA custom component driving the MyHyundai widget over ADB (recipes are editable JSON) |
 | `tests/` | Production unit tests for the custom component (pytest-homeassistant-custom-component) |
-| `apps/ha-mcu-bridge/` | App Lab app: MCU sketch (pin RPC) + Python MQTT bridge with HA Discovery |
+| `apps/ha-mcu-bridge/` | App Lab app: MCU sketch (LED + pin RPC) + Python MQTT bridge with HA Discovery; `python/led_color.py` holds the colour/brightness maths |
 | `apps/mosquitto/mosquitto.conf` | MQTT broker config (host-local listeners, nothing on the LAN) |
 | `claude_test/` | Working diagnostic scripts (subnet Tapo probe, HA onboarding/auth/registration, toggle tester) — each documented in its README |
 | `external/CommonClaude` | Shared engineering conventions (git submodule) |
@@ -246,17 +260,21 @@ ssh unoq 'arduino-app-cli app start \
 ssh unoq 'arduino-app-cli properties set default \
   /home/arduino/ArduinoApps/ha-mcu-bridge'
 
-# 7. Verify: list the switch entities HA created, then toggle a plug
-#    and an MCU LED end-to-end. The LED matrix should already be
+# 7. Verify: the two LED lights HA discovered, then drive LED3 with a
+#    colour at mid brightness. The LED matrix should already be
 #    showing the CPU (2 rows) / MEM (3 rows) load bars.
 ssh unoq 'curl -s http://localhost:8123/api/states \
   -H "Authorization: Bearer $(cat /home/arduino/.ha_token)" \
   | python3 -c "import sys,json
 for e in json.load(sys.stdin):
-    if e[\"entity_id\"].startswith(\"switch.\"): print(e[\"entity_id\"])"'
+    if e[\"entity_id\"].startswith(\"light.\"): print(e[\"entity_id\"])"'
+ssh unoq 'curl -s -X POST \
+  http://localhost:8123/api/services/light/turn_on \
+  -H "Authorization: Bearer $(cat /home/arduino/.ha_token)" \
+  -H "Content-Type: application/json" \
+  -d "{\"entity_id\":\"light.uno_q_mcu_led3\",
+       \"rgb_color\":[255,0,180],\"brightness\":64}"'
 ssh unoq 'bash -s -- switch.<plug_entity> 3' \
-  < claude_test/toggle_test.sh
-ssh unoq 'bash -s -- switch.uno_q_mcu_uno_q_led3_g 3' \
   < claude_test/toggle_test.sh
 ```
 

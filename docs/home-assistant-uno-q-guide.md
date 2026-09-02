@@ -433,21 +433,53 @@ ssh unoq 'arduino-app-cli properties set default \
 # verify: arduino-app-cli properties get default
 ```
 
-### 9d. Verify and toggle
+### 9d. Verify and drive the LEDs
 
 ```bash
 # Discovery + state topics on the broker:
 ssh unoq 'docker exec mosquitto mosquitto_sub -h 127.0.0.1 \
-  -t "unoq/#" -C 7 -W 5 -v'
-# expect: unoq/bridge/availability online, six .../state OFF
+  -t "unoq/#" -C 3 -W 5 -v'
+# expect: unoq/bridge/availability online, plus one JSON state
+# document per LED, both "state":"OFF"
 
 # Entities in HA (created automatically by MQTT Discovery):
-# switch.uno_q_mcu_uno_q_led3_r ... led4_b  (6 total)
+# light.uno_q_mcu_led3  — RGB + brightness (PWM-backed)
+# light.uno_q_mcu_led4  — RGB quantized to 8 colours (GPIO-only)
 
-# End-to-end LED blink, 3 s cadence — LED3 blinks green on the board:
-ssh unoq 'bash -s -- switch.uno_q_mcu_uno_q_led3_g 3' \
-  < claude_test/toggle_test.sh
+# End-to-end: LED3 at a colour and a mid brightness.
+ssh unoq 'curl -s -X POST \
+  http://localhost:8123/api/services/light/turn_on \
+  -H "Authorization: Bearer $(cat /home/arduino/.ha_token)" \
+  -H "Content-Type: application/json" \
+  -d "{\"entity_id\":\"light.uno_q_mcu_led3\",
+       \"rgb_color\":[255,0,180],\"brightness\":64}"'
+
+# The bridge log prints the duty cycle it sent to the MCU, which is
+# the quickest way to confirm the colour maths without watching the
+# board:
+ssh unoq 'arduino-app-cli app logs user:ha-mcu-bridge | tail -3'
+# expect: led3 -> ON (64, 0, 45)
 ```
+
+### 9e. Why LED3 dims and LED4 does not
+
+Only LED3's three channels (PH10/11/12) are listed in the devicetree's
+`pwm-pin-gpios`, mapped to pwm5 channels 1-3 at 500 Hz with inverted
+polarity — the inversion cancels the active-low wiring, so
+`analogWrite(255)` is full brightness and `analogWrite(0)` is off.
+LED4 (PH13/14/15) has no PWM mapping, so it is driven with
+`digitalWrite` and its colour is quantized to the eight on/off
+combinations; lowering its brightness dims it by dropping channels
+rather than smoothly.
+
+The trap worth remembering: `analogWrite()` in this core only calls
+`pwm_set_pulse_dt()` and never re-applies pinctrl. Once a pad has been
+configured for GPIO — one `pinMode()` or `digitalWrite()` is enough —
+the PWM signal stops reaching it until the MCU resets. That is why the
+sketch keeps the LED3 channels out of its pin table entirely and
+initialises them with `analogWrite(0)` instead of `pinMode`. If LED3
+ever comes back as on/off-only, look for a stray GPIO call on those
+pins first (`claude_test/led3_pwm_probe` reproduces both outcomes).
 
 Verified result: 6/6 transitions OK, ~1 s command-to-state latency,
 LED visibly blinking. The switches are also on the HA dashboard

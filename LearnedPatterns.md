@@ -131,6 +131,31 @@ detection, #2 reproducibility guide, #3 WiFi + VS Code Remote-SSH,
   HA. **Rule**: Always set the HA core time zone right after a
   headless onboarding, and use the WebSocket API for core config
   changes. (from ToDo#26)
+- **Problem**: `analogWrite()` on the UNO Q's LED3 channels did
+  nothing — the LED stayed dark through a full brightness sweep —
+  even though the devicetree maps those pads to pwm5 channels.
+  **Cause**: The Arduino Zephyr core's `analogWrite()` only calls
+  `pwm_set_pulse_dt()`; it never re-applies pinctrl. An earlier
+  `pinMode()`/`digitalWrite()` on the same pad had already switched
+  it to GPIO, and the PWM signal never reached it again. **Fix**:
+  Keep the PWM-driven pins out of every GPIO code path (no
+  `pinMode`, no pin table entry) and initialise them with
+  `analogWrite(0)`; verified by re-flashing with the GPIO call
+  removed. **Rule**: Never mix the GPIO and PWM APIs on one pad in
+  a single MCU session — the first `pinMode` wins until reset.
+  (from ToDo#40)
+- **Problem**: A sketch calling the core's `pwm_pin_index()` failed
+  to link (`undefined reference`), which looked like PWM being
+  unavailable. **Cause**: GCC inlines it into `analogWrite`, so no
+  symbol survives in `core.a`; separately, `syms-dynamic.ld`
+  exports no PWM symbols at all, which is also a red herring
+  because Zephyr reaches the driver through the device API pointer
+  rather than an exported syscall. **Fix**: Verify the pin -> PWM
+  channel mapping statically from the devicetree
+  (`digital-pin-gpios` index vs `pwm-pin-gpios`) instead of at
+  runtime. **Rule**: Never conclude a peripheral is missing from a
+  link error against a core-internal helper; check the devicetree
+  and the exported symbol table separately. (from ToDo#40)
 
 ## §4. Workflow Lessons
 

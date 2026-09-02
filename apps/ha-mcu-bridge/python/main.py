@@ -1,9 +1,14 @@
-"""Bridge UNO Q MCU pins to Home Assistant via MQTT Discovery.
+"""Bridge UNO Q on-board LEDs to Home Assistant via MQTT Discovery.
 
-Publishes one MQTT switch per entry in PIN_CONFIG. Commands received
-over MQTT are forwarded to the MCU sketch through the Arduino router
-Bridge RPC (set_pin_by_name). States are echoed back on retained
-state topics so Home Assistant stays in sync.
+Publishes the two RGB user LEDs as MQTT JSON lights and, optionally,
+one MQTT switch per entry in PIN_CONFIG for the D2-D13 header pins.
+Commands received over MQTT are forwarded to the MCU sketch through the
+Arduino router Bridge RPC. States are echoed back on retained state
+topics so Home Assistant stays in sync.
+
+LED3 has PWM channels behind it and gets true 24-bit colour plus
+brightness; LED4 is GPIO-only, so its colour collapses to the eight
+on/off combinations (see led_color.quantize_rgb).
 
 A daemon thread also samples the Linux-side CPU and memory usage and
 pushes them to the sketch (show_load RPC), which renders them as
@@ -22,6 +27,7 @@ import time
 import paho.mqtt.client as mqtt
 import psutil
 from arduino.app_utils import App, Bridge
+from led_color import CHANNEL_MAX, quantize_rgb, scale_rgb
 
 # App Lab apps run in bridged Docker containers, so host loopback is
 # unreachable; the broker listens on docker0 (172.17.0.1) for us.
@@ -37,24 +43,26 @@ UPDATE_INTERVAL_S = 2.0
 # Broker reconnect delay while the router network is still coming up.
 RETRY_DELAY_S = 5
 
-# Pins exposed to Home Assistant. The RGB user LEDs are safe defaults
-# (nothing external is wired to them); header pins D2-D13 are
-# commented out on purpose -- enable only the ones whose wiring you
-# know is safe to drive.
+# The two on-board RGB user LEDs. "quantize" marks the GPIO-only one:
+# its scaled colour is rounded to on/off per channel, so lowering
+# brightness dims it by dropping channels rather than smoothly.
+LIGHT_CONFIG = {
+    "led3": {"name": "LED3", "rpc": "set_led3_rgb", "quantize": False},
+    "led4": {"name": "LED4", "rpc": "set_led4_rgb", "quantize": True},
+}
+
+# Header pins exposed to Home Assistant as plain switches. Commented
+# out on purpose -- enable only the ones whose wiring you know is safe
+# to drive. The LED pins are NOT available here: LED3 must never be
+# touched by the GPIO API or its PWM stops working until an MCU reset.
 PIN_CONFIG = {
-    "LED3_R": {"active_low": True},
-    "LED3_G": {"active_low": True},
-    "LED3_B": {"active_low": True},
-    "LED4_R": {"active_low": True},
-    "LED4_G": {"active_low": True},
-    "LED4_B": {"active_low": True},
     # "D13": {"active_low": False},
     # "D12": {"active_low": False},
 }
 
 
 class HaMcuBridge:
-    """Bridge MCU pins and load stats between MQTT and the sketch.
+    """Bridge the on-board LEDs and load stats to MQTT.
 
     run() is the only public method. The _handle_* methods are MQTT
     callbacks invoked by paho-mqtt, and the remaining underscore
@@ -64,6 +72,18 @@ class HaMcuBridge:
     def __init__(self):
         """Create the MQTT client and register its callbacks."""
         self._lock = threading.Lock()
+        self._lights = {
+            name: {
+                "state": "OFF",
+                "brightness": CHANNEL_MAX,
+                "color": {
+                    "r": CHANNEL_MAX,
+                    "g": CHANNEL_MAX,
+                    "b": CHANNEL_MAX,
+                },
+            }
+            for name in LIGHT_CONFIG
+        }
         self._client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self._client.on_connect = self._handle_connect
         self._client.on_message = self._handle_message
@@ -94,59 +114,117 @@ class HaMcuBridge:
     # -- MQTT callbacks (invoked by paho-mqtt) ---------------------------
 
     def _handle_connect(self, client, userdata, flags, reason_code, props):
-        """Announce discovery, availability, and initial pin states."""
+        """Announce discovery, availability, and initial states."""
         print(f"MQTT connected: {reason_code}")
         self._publish_discovery()
         client.publish(AVAILABILITY_TOPIC, "online", retain=True)
+        for name in LIGHT_CONFIG:
+            client.subscribe(self._build_command_topic(name))
+            # The sketch turns both LEDs off in setup().
+            self._publish_light_state(name)
         for name in PIN_CONFIG:
             client.subscribe(self._build_command_topic(name))
-            # All pins start OFF (sketch setup() turns everything off).
             client.publish(self._build_state_topic(name), "OFF", retain=True)
 
     def _handle_message(self, client, userdata, msg):
-        """Apply one ON/OFF command from Home Assistant to its pin."""
+        """Apply one command from Home Assistant to its LED or pin."""
         name = msg.topic.split("/")[1]
-        if name not in PIN_CONFIG:
-            return
-        payload = msg.payload.decode().strip().upper()
-        logical_on = payload == "ON"
         try:
-            self._apply_pin(name, logical_on)
-            client.publish(
-                self._build_state_topic(name),
-                "ON" if logical_on else "OFF",
-                retain=True,
-            )
-            print(f"{name} -> {'ON' if logical_on else 'OFF'}")
+            if name in LIGHT_CONFIG:
+                self._apply_light(name, json.loads(msg.payload.decode()))
+                self._publish_light_state(name)
+            elif name in PIN_CONFIG:
+                self._apply_pin(name, msg.payload.decode().strip().upper())
         except Exception as e:
             print(f"Bridge call failed for {name}: {e}")
 
     # -- Internal helpers ------------------------------------------------
 
     def _build_command_topic(self, name):
-        """Return the MQTT command topic for one pin name."""
+        """Return the MQTT command topic for one LED or pin name."""
         return f"{BASE_TOPIC}/{name}/set"
 
     def _build_state_topic(self, name):
-        """Return the MQTT state topic for one pin name."""
+        """Return the MQTT state topic for one LED or pin name."""
         return f"{BASE_TOPIC}/{name}/state"
 
-    def _apply_pin(self, name, logical_on):
-        """Forward one logical switch state to the MCU over Bridge RPC."""
+    def _apply_light(self, name, command):
+        """Merge one JSON light command into state and drive the LED."""
+        light = self._lights[name]
+        light["state"] = command.get("state", light["state"]).upper()
+        if "brightness" in command:
+            light["brightness"] = command["brightness"]
+        if "color" in command:
+            light["color"] = {
+                channel: command["color"].get(channel, 0)
+                for channel in ("r", "g", "b")
+            }
+
+        if light["state"] == "ON":
+            colour = tuple(light["color"][c] for c in ("r", "g", "b"))
+            duty = scale_rgb(colour, light["brightness"])
+            if LIGHT_CONFIG[name]["quantize"]:
+                duty = quantize_rgb(duty)
+        else:
+            duty = (0, 0, 0)
+
+        with self._lock:
+            Bridge.call(LIGHT_CONFIG[name]["rpc"], *duty)
+        print(f"{name} -> {light['state']} {duty}")
+
+    def _apply_pin(self, name, payload):
+        """Forward one ON/OFF switch command to a header pin."""
+        logical_on = payload == "ON"
         hw_state = (
             (not logical_on) if PIN_CONFIG[name]["active_low"] else logical_on
         )
         with self._lock:
             Bridge.call("set_pin_by_name", name, hw_state)
+        self._client.publish(
+            self._build_state_topic(name),
+            "ON" if logical_on else "OFF",
+            retain=True,
+        )
+        print(f"{name} -> {'ON' if logical_on else 'OFF'}")
+
+    def _publish_light_state(self, name):
+        """Echo one light's full state on its retained state topic."""
+        light = self._lights[name]
+        payload = {
+            "state": light["state"],
+            "brightness": light["brightness"],
+            "color_mode": "rgb",
+            "color": light["color"],
+        }
+        self._client.publish(
+            self._build_state_topic(name), json.dumps(payload), retain=True
+        )
 
     def _publish_discovery(self):
-        """Publish one retained MQTT Discovery config per pin."""
+        """Publish one retained MQTT Discovery config per entity."""
         device = {
             "identifiers": ["unoq_mcu_bridge"],
             "name": "UNO Q MCU",
             "manufacturer": "Arduino",
             "model": "UNO Q (STM32U585)",
         }
+        for name, spec in LIGHT_CONFIG.items():
+            config = {
+                "name": spec["name"],
+                "unique_id": f"unoq_{name}",
+                "schema": "json",
+                "brightness": True,
+                "supported_color_modes": ["rgb"],
+                "command_topic": self._build_command_topic(name),
+                "state_topic": self._build_state_topic(name),
+                "availability_topic": AVAILABILITY_TOPIC,
+                "device": device,
+            }
+            self._client.publish(
+                f"{DISCOVERY_PREFIX}/light/unoq_{name}/config",
+                json.dumps(config),
+                retain=True,
+            )
         for name in PIN_CONFIG:
             config = {
                 "name": f"UNO Q {name}",
@@ -169,7 +247,7 @@ class HaMcuBridge:
 
         Runs as a daemon thread next to the MQTT loop. Every iteration
         is wrapped in try/except so a Bridge or psutil hiccup only
-        skips one frame and can never take down the MQTT switch side.
+        skips one frame and can never take down the MQTT light side.
         """
         # The first cpu_percent(None) call only primes psutil's internal
         # counters and returns a meaningless 0.0 -- discard it.
