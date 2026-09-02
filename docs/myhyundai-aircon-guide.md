@@ -126,6 +126,7 @@ notification wait limit is set per-step in the recipe instead.
 | `binary_sensor.myhyundai_doors_locked` | 문잠김/문열림 from the widget status text; unknown until observed |
 | `sensor.myhyundai_data_updated_at` | The widget's "N시 기준" timestamp (Korean 오전/오후 parsed; day rolls back when needed — requires the HA timezone to be set correctly) |
 | `sensor.myhyundai_app_version` | MyHyundai versionName from `dumpsys package` — automate an alert on change to catch UI-breaking updates early |
+| `binary_sensor.myhyundai_climate_running` | REAL climate state: while remote climate runs the widget draws a blue aura around the car image, detected by pixel analysis of the poll screenshot (calibrated 2026-09-02: ON = 0.015 glow fraction, OFF = exactly 0; threshold 0.005; raw value exposed as the `glow_fraction` attribute). Updates on every vehicle poll, and within ~30 s after each switch command. Unlike the assumed-state switch, this notices when the car shuts climate off by itself |
 
 The vehicle sensors come from a **read-only widget scrape** (wake →
 home → UI dump → parse) every `vehicle_poll_minutes` (default 15,

@@ -1143,3 +1143,54 @@ never overlaps a running sequence. (see LP §3, §5)
 - 52/52 tests on the board venv; scrape is read-only, lock-safe,
   refresh control never tapped. GitHub issue #32, branch
   feature/myhyundai-vehicle-data.
+
+## 2026-09-02 — Experiment: does the widget reveal the live
+## climate state?
+
+Requested by user ("한번 실험을 진행해보자"). The aircon switch is
+assumed-state (spec §1.4); if the widget's status area changes
+while the climate actually runs, a real climate-state sensor (and
+optional switch-state correction) becomes possible. Protocol: OFF
+baseline dump → aircon_on via the switch (1 real command) → dumps
+at ~+15 s and ~+75 s while ON → aircon_off after the 60 s cooldown
+(vehicle restored) → post-OFF dump → node-level diff of the
+MyHyundai widget subtree across all dumps. If a marker is found,
+implement the sensor in this same branch; if not, record the
+negative result and keep the switch optimistic.
+
+- [x] Run the on/off observation protocol and collect dumps
+- [x] Diff the widget nodes across OFF/ON/OFF states
+- [x] If a marker exists: parser + binary_sensor + tests + deploy;
+      else record the negative finding
+- [x] Record results below
+
+### Results (2026-09-02)
+
+- Node-level diff: NO text/desc marker — the widget's texts are
+  identical across OFF/ON/OFF except live data (timestamp
+  refreshed on each command result: 8:07→8:57→8:59; range
+  367→366 km while climate ran →375 km after — the app refreshes
+  widget data on every command push, a useful side-finding).
+- SCREENSHOT diff found the marker: while climate runs, the widget
+  draws a light-blue AURA around the car image; it vanished in the
+  post-off capture, correlating exactly with state (the battery
+  icon color also changed but tracks data generation, not
+  climate — rejected as a marker).
+- Pixel metric calibrated on the four real captures: fraction of
+  pixels with B>150 and B>R+20 inside the 차량-상태 region =
+  0.0151 when ON, exactly 0.0000 when OFF (both OFF captures).
+  Threshold 0.005 → 3x margin, zero false-positive headroom needed.
+- Implemented: measure_glow_fraction + find_vehicle_image_bounds
+  in vehicle_data.py (Pillow imported lazily — present in the HA
+  venv, degrades to unknown if absent), screenshot captured INSIDE
+  the executor lock so it always matches the node dump,
+  coordinator glow judging, binary_sensor.myhyundai_climate_
+  running (device_class running, glow_fraction attribute), and a
+  post-command poll reset so the sensor catches up within ~30 s of
+  any switch action.
+- 54/54 tests on the board venv (incl. synthetic-image metric
+  tests); live deploy verified climate_running=off /
+  glow_fraction=0.0 against the real idle vehicle. ON-state
+  detection stands on the real calibration captures. Cost: one
+  aircon on/off cycle, vehicle restored. GitHub issue #34, branch
+  feature/myhyundai-climate-state.

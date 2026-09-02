@@ -75,9 +75,12 @@ DUMP_DIR_NAME = "myhyundai_aircon_dumps"
 # XML + PNG pairs; 20 pairs keeps the eMMC safe (2 GB free).
 DUMP_RETENTION_FILES = 40
 
-# On-device scratch paths used while capturing dumps.
+# On-device scratch paths used while capturing dumps. The poll
+# screenshot has its own path so a capture_dump call can never
+# race the vehicle poll on the same file.
 DEVICE_UI_XML_PATH = "/sdcard/myhyundai_aircon_ui.xml"
 DEVICE_SCREENSHOT_PATH = "/sdcard/myhyundai_aircon_cap.png"
+DEVICE_POLL_SCREENSHOT_PATH = "/sdcard/myhyundai_aircon_poll.png"
 
 # Error codes from spec §9.3, plus E_UNKNOWN_SEQUENCE for a
 # run_sequence call naming a key the recipe does not define.

@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import tempfile
 import time
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
@@ -25,7 +27,10 @@ from homeassistant.util import dt as dt_util
 
 from .adb_client import AdbClient, AdbClientError
 from .vehicle_data import (
+    GLOW_THRESHOLD,
     VehicleData,
+    find_vehicle_image_bounds,
+    measure_glow_fraction,
     parse_app_version,
     parse_vehicle_data,
 )
@@ -98,6 +103,12 @@ class MyHyundaiCoordinator(DataUpdateCoordinator[bool]):
         self.vehicle_data = VehicleData()
         self.app_version: str | None = None
         self._last_vehicle_poll_monotonic: float | None = None
+        # Climate-glow detection from the poll screenshot.
+        self.climate_running: bool | None = None
+        self.glow_fraction: float | None = None
+        self._poll_screenshot_path = os.path.join(
+            tempfile.gettempdir(), "myhyundai_poll.png"
+        )
 
     async def async_execute(
         self, sequence: str, *, ignore_guards: bool = False
@@ -245,6 +256,10 @@ class MyHyundaiCoordinator(DataUpdateCoordinator[bool]):
             self.last_error = "none"
             self.last_success_at = dt_util.now()
             self._last_success_monotonic = time.monotonic()
+            # A command changed the vehicle state; let the next
+            # 30 s connectivity tick re-scrape so climate_running
+            # and the widget data catch up quickly.
+            self._last_vehicle_poll_monotonic = None
         else:
             self.last_result = "failure"
             self.last_error = error.code if error else "unknown"
@@ -318,7 +333,9 @@ class MyHyundaiCoordinator(DataUpdateCoordinator[bool]):
         ):
             return
         try:
-            nodes = await self.executor.async_snapshot_home_nodes()
+            nodes = await self.executor.async_snapshot_home_nodes(
+                screenshot_path=self._poll_screenshot_path
+            )
             version_line = await self.client.async_shell(
                 "dumpsys package"
                 f" {self.executor.recipe.package}"
@@ -328,11 +345,38 @@ class MyHyundaiCoordinator(DataUpdateCoordinator[bool]):
             _LOGGER.warning("Vehicle data poll skipped: %s", err)
             return
         self._last_vehicle_poll_monotonic = now
-        self.vehicle_data = parse_vehicle_data(
-            nodes, self.executor.recipe.package, dt_util.now()
-        )
+        package = self.executor.recipe.package
+        self.vehicle_data = parse_vehicle_data(nodes, package, dt_util.now())
         self.app_version = parse_app_version(version_line)
-        _LOGGER.debug("Vehicle data: %s", self.vehicle_data)
+        await self._detect_climate_glow(nodes, package)
+        _LOGGER.debug(
+            "Vehicle data: %s climate_running=%s glow=%s",
+            self.vehicle_data,
+            self.climate_running,
+            self.glow_fraction,
+        )
+
+    async def _detect_climate_glow(self, nodes, package: str) -> None:
+        """Judge the climate state from the widget's glow aura.
+
+        Calibrated on real captures: the ON aura measures ~0.015
+        glow fraction, OFF measures exactly 0. Unknown when the
+        vehicle-image region or Pillow is unavailable.
+        """
+        bounds = find_vehicle_image_bounds(nodes, package)
+        fraction = None
+        if bounds is not None:
+            fraction = await self.hass.async_add_executor_job(
+                measure_glow_fraction,
+                self._poll_screenshot_path,
+                bounds,
+            )
+        if fraction is None:
+            self.climate_running = None
+            self.glow_fraction = None
+            return
+        self.glow_fraction = round(fraction, 4)
+        self.climate_running = fraction > GLOW_THRESHOLD
 
     def _reset_backoff(self) -> None:
         """Return to the normal poll cadence after a good check."""
