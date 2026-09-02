@@ -8,6 +8,9 @@ from datetime import datetime, timezone, timedelta
 
 from custom_components.myhyundai_aircon.executor import parse_ui_dump
 from custom_components.myhyundai_aircon.vehicle_data import (
+    GLOW_THRESHOLD,
+    find_vehicle_image_bounds,
+    measure_glow_fraction,
     parse_app_version,
     parse_vehicle_data,
     parse_widget_time,
@@ -22,6 +25,7 @@ VEHICLE_XML = """<?xml version='1.0' encoding='UTF-8'?>
     <node text="오전 8:07 기준" resource-id="" content-desc="" class="android.widget.TextView" package="com.hyundai.oneapp.kr" bounds="[90,320][251,356]"/>
     <node text="" resource-id="" content-desc="업데이트 가능" class="android.widget.ImageView" package="com.hyundai.oneapp.kr" bounds="[251,321][286,356]"/>
     <node text="캐스퍼 Electric" resource-id="" content-desc="" class="android.widget.TextView" package="com.hyundai.oneapp.kr" bounds="[90,253][649,322]"/>
+    <node text="" resource-id="" content-desc="차량 상태, 문잠김" class="android.widget.FrameLayout" package="com.hyundai.oneapp.kr" bounds="[90,365][750,666]"/>
     <node text="93%" resource-id="" content-desc="" class="android.widget.TextView" package="com.hyundai.oneapp.kr" bounds="[169,666][245,716]"/>
     <node text="367km" resource-id="" content-desc="" class="android.widget.TextView" package="com.hyundai.oneapp.kr" bounds="[291,666][401,716]"/>
     <node text="켜기" resource-id="" content-desc="" class="android.widget.TextView" package="com.hyundai.oneapp.kr" bounds="[140,851][185,888]"/>
@@ -92,3 +96,40 @@ def test_parse_app_version() -> None:
     """versionName is pulled from dumpsys package output."""
     assert parse_app_version(DUMPSYS_PACKAGE_SNIPPET) == "5.3.1"
     assert parse_app_version("nothing here") is None
+
+
+def test_find_vehicle_image_bounds() -> None:
+    """The 차량 상태 region is found; the 마이현대 container is not."""
+    nodes = parse_ui_dump(VEHICLE_XML)
+    assert find_vehicle_image_bounds(nodes, HYUNDAI_PKG) == (
+        90,
+        365,
+        750,
+        666,
+    )
+    assert find_vehicle_image_bounds(nodes, "com.other") is None
+
+
+def _write_widget_image(path, glow: bool) -> None:
+    """Paint a navy region, optionally with a light-blue aura band."""
+    from PIL import Image
+
+    navy = (27, 42, 74)
+    image = Image.new("RGB", (100, 100), navy)
+    if glow:
+        aura = Image.new("RGB", (100, 10), (140, 190, 255))
+        image.paste(aura, (0, 45))
+    image.save(path)
+
+
+def test_measure_glow_fraction(tmp_path) -> None:
+    """The glow metric separates aura from plain navy background."""
+    off_path = tmp_path / "off.png"
+    on_path = tmp_path / "on.png"
+    _write_widget_image(off_path, glow=False)
+    _write_widget_image(on_path, glow=True)
+    bounds = (0, 0, 100, 100)
+    assert measure_glow_fraction(str(off_path), bounds) == 0.0
+    on_fraction = measure_glow_fraction(str(on_path), bounds)
+    assert on_fraction > GLOW_THRESHOLD
+    assert measure_glow_fraction(str(tmp_path / "nope.png"), bounds) is None

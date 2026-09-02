@@ -19,6 +19,7 @@ from xml.etree import ElementTree
 
 from .adb_client import AdbClient, AdbClientError
 from .const import (
+    DEVICE_POLL_SCREENSHOT_PATH,
     DEVICE_UI_XML_PATH,
     ERR_COOLDOWN,
     ERR_DEVICE_OFFLINE,
@@ -259,12 +260,16 @@ class SequenceExecutor:
                 "notification_text": self.last_notification_text,
             }
 
-    async def async_snapshot_home_nodes(self) -> list[UiNode]:
+    async def async_snapshot_home_nodes(
+        self, screenshot_path: str | None = None
+    ) -> list[UiNode]:
         """Wake the device, go home, and return the parsed UI nodes.
 
         Read-only path used for vehicle-data scraping; serialized
         behind the same lock as sequences so it never interleaves
-        with a running command.
+        with a running command. When ``screenshot_path`` is given, a
+        screencap taken inside the same lock (so it matches the
+        nodes) is pulled to that local file.
 
         Raises:
             SequenceError: E_COOLDOWN while a sequence is running,
@@ -277,7 +282,17 @@ class SequenceExecutor:
         async with self._lock:
             await self._step_wake()
             await self._step_home()
-            return await self._get_nodes()
+            nodes = await self._get_nodes()
+            if screenshot_path is not None:
+                await self._shell(f"screencap -p {DEVICE_POLL_SCREENSHOT_PATH}")
+                try:
+                    await self._client.async_pull(
+                        DEVICE_POLL_SCREENSHOT_PATH, screenshot_path
+                    )
+                except AdbClientError as err:
+                    raise SequenceError(ERR_DEVICE_OFFLINE, str(err)) from err
+                await self._shell(f"rm {DEVICE_POLL_SCREENSHOT_PATH}")
+            return nodes
 
     async def async_capture_ui_xml(self) -> str:
         """Dump the current UI hierarchy and return the XML text."""

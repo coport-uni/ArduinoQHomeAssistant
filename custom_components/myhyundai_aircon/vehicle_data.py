@@ -130,3 +130,61 @@ def parse_app_version(dumpsys_package_output: str) -> str | None:
     """Extract versionName from ``dumpsys package`` output."""
     found = _VERSION_PATTERN.search(dumpsys_package_output)
     return found.group(1) if found else None
+
+
+_VEHICLE_IMAGE_DESC_PREFIX = "차량 상태"
+
+# Climate-glow metric, calibrated on real cover-screen captures
+# (2026-09-02): while remote climate runs, the widget draws a light
+# blue aura around the car image. Fraction of matching pixels in
+# the vehicle-image region measured 0.0151 when ON and exactly
+# 0.0000 when OFF, so the threshold sits 3x under the ON signal.
+GLOW_BLUE_MIN = 150
+GLOW_BLUE_OVER_RED = 20
+GLOW_THRESHOLD = 0.005
+
+
+def find_vehicle_image_bounds(
+    nodes: list[UiNode], package: str
+) -> tuple[int, int, int, int] | None:
+    """Locate the widget's vehicle-image region for glow analysis.
+
+    The region is the node whose content-desc starts with
+    "차량 상태" (the whole-widget container starts with "마이현대"
+    instead, so it never matches).
+    """
+    for node in nodes:
+        if node.package != package:
+            continue
+        if node.content_desc.startswith(_VEHICLE_IMAGE_DESC_PREFIX):
+            return node.bounds
+    return None
+
+
+def measure_glow_fraction(
+    screenshot_path: str, bounds: tuple[int, int, int, int]
+) -> float | None:
+    """Fraction of climate-glow pixels inside the given region.
+
+    Blocking (file I/O + pixel scan) — call through an executor
+    job. Returns None when Pillow is unavailable or the file cannot
+    be read, so callers degrade to unknown instead of failing.
+    """
+    try:
+        from PIL import Image
+    except ImportError:
+        return None
+    try:
+        with Image.open(screenshot_path) as image:
+            region = image.convert("RGB").crop(bounds)
+            pixels = list(region.getdata())
+    except (OSError, ValueError):
+        return None
+    if not pixels:
+        return None
+    glow = sum(
+        1
+        for red, _green, blue in pixels
+        if blue > GLOW_BLUE_MIN and blue > red + GLOW_BLUE_OVER_RED
+    )
+    return glow / len(pixels)

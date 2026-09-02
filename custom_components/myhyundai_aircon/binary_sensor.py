@@ -21,6 +21,7 @@ async def async_setup_entry(
         [
             MyHyundaiConnectedSensor(coordinator, entry),
             MyHyundaiDoorsLockedSensor(coordinator, entry),
+            MyHyundaiClimateRunningSensor(coordinator, entry),
         ]
     )
 
@@ -64,3 +65,32 @@ class MyHyundaiDoorsLockedSensor(MyHyundaiEntity, BinarySensorEntity):
     def is_on(self) -> bool | None:
         """Return the scraped lock state, or None when unknown."""
         return self.coordinator.vehicle_data.doors_locked
+
+
+class MyHyundaiClimateRunningSensor(MyHyundaiEntity, BinarySensorEntity):
+    """Real climate state, detected from the widget's glow aura.
+
+    Unlike the assumed-state switch, this reflects what the widget
+    actually shows: while remote climate runs, the app draws a blue
+    aura around the car image, which pixel analysis of the poll
+    screenshot detects (experiment of 2026-09-02: ON 0.015 glow
+    fraction, OFF exactly 0).
+    """
+
+    _attr_device_class = BinarySensorDeviceClass.RUNNING
+    _attr_name = "climate running"
+    _attr_icon = "mdi:fan"
+
+    def __init__(self, coordinator, entry) -> None:
+        """Bind to the coordinator's glow detection result."""
+        super().__init__(coordinator, entry, "climate_running")
+
+    @property
+    def is_on(self) -> bool | None:
+        """Return the detected state, or None before the first poll."""
+        return self.coordinator.climate_running
+
+    @property
+    def extra_state_attributes(self) -> dict:
+        """Expose the raw glow fraction for threshold tuning."""
+        return {"glow_fraction": self.coordinator.glow_fraction}
