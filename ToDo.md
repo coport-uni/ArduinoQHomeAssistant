@@ -1247,3 +1247,27 @@ options set to vehicle_poll_minutes=3 + widget_refresh_enabled.
   characterized (glow seen sustained ~83 s post aircon-on in the
   PR#35 experiment) — documented as best-effort with the
   glow_fraction attribute exposed for tuning.
+
+## 2026-09-02 — README update for the vehicle-data work
+
+Requested by user ("지금까지 작업한 걸 README.md에 기록하고 main
+에도 반영해줘"). Fold the three post-documentation PRs (#33 vehicle
+data sensors, #35 climate-state glow detection, #37 widget
+force-refresh) into README.md and merge to main.
+
+- [x] Update intro, "What was built", verified results, and
+      gotchas in README.md
+- [x] PR + merge to main
+- [x] Record results below
+
+### Results (2026-09-02)
+
+- Intro and diagram now show the read-only scrape arrow back from
+  the vehicle; "What was built" gained three bullets (telemetry
+  without an API, real climate state via glow analysis, opt-in
+  force-refresh with the settled-before-refresh ordering) and the
+  test count moved 46 -> 57; verified-results table gained three
+  rows (live telemetry values, glow calibration, 3-min refresh
+  freshness); gotchas gained the UTC-timezone trap and the
+  "a visual marker may mean something broader than it looks"
+  lesson from the aura finding.

@@ -15,7 +15,10 @@ a single **Arduino UNO Q** board:
 - A **real Hyundai vehicle's remote climate** is switched from Home
   Assistant via the `myhyundai_aircon` custom component, which drives
   the MyHyundai app widget on a dedicated Android phone over ADB
-  (no official Korean-region control API exists). See
+  (no official Korean-region control API exists). The same widget is
+  also **scraped for live vehicle data** — battery %, range, door
+  lock, and even whether climate is actually running — so the rig
+  gets telemetry without any vendor API. See
   [docs/myhyundai-aircon-guide.md](docs/myhyundai-aircon-guide.md).
 - Everything is driven remotely from a host PC over **WiFi (SSH)**.
   USB/ADB is used exactly once, to join WiFi and enable SSH — after
@@ -78,6 +81,8 @@ Two consequences that surprise R4 users most:
                      │  Bluelink push
                      ▼
                Hyundai vehicle — remote climate ON/OFF
+                     ▲  widget scrape (read-only, every 3 min)
+                     └─ battery % · range · doors · climate state
 ```
 
 - Home Assistant onboarded and administered headlessly via REST +
@@ -105,8 +110,25 @@ Two consequences that surprise R4 users most:
   UI dumps, never guessed); safety guards (cooldown, minimum gap,
   battery floor), a retry ladder, an auto-off timer matching the
   vehicle's 10-minute limit, and failure-dump diagnostics are built
-  in. 46 unit tests run on the board itself. Built in one day
-  across 7 PRs against `docs/SPEC-myhyundai-aircon-component.md`.
+  in. Built in one day across 7 PRs against
+  `docs/SPEC-myhyundai-aircon-component.md`, then extended with
+  telemetry (below); 57 unit tests run on the board itself.
+- **Vehicle telemetry without an API**: the same widget is scraped
+  read-only on a timer for EV battery %, range, door-lock state,
+  the app's data timestamp, and the MyHyundai app version (an early
+  warning that a UI change may break the recipes). Parsers are
+  tolerant — a reworded field degrades one sensor to unknown
+  instead of breaking the integration.
+- **Real climate state, not just the optimistic switch**: while the
+  app talks to the car, the widget draws a blue aura around the
+  vehicle image. Pixel analysis of the poll screenshot turns that
+  into `binary_sensor.myhyundai_climate_running` (calibrated on
+  real captures: 0.0151 glow fraction lit vs exactly 0 at rest).
+- **Force-refresh** (opt-in): each poll can first tap the widget's
+  refresh control so the scraped data is seconds old rather than
+  minutes. Because the aura also lights during that refresh, the
+  climate glow is measured from the settled widget *before* the tap
+  and the data is read *after* it.
 - Frontend themed with **Graphite** (top-3 HACS theme, installed
   manually since HACS's OAuth is interactive): "Graphite Auto" is
   the backend default and follows light/dark automatically.
@@ -120,7 +142,10 @@ Two consequences that surprise R4 users most:
 | Tapo relay toggle via HA, 3 s cadence | 6/6 transitions OK, ~1 s latency |
 | MCU LED toggle via HA → MQTT → RPC, 3 s cadence | 6/6 transitions OK, LED visibly blinking |
 | System-load bars on the 8x13 LED matrix | Idle: CPU 1-2 cols, MEM ~5 cols (~35 %); 4-core `yes` stress grows the CPU bar and it shrinks back; HA switches keep passing 6/6 concurrently |
-| Vehicle aircon via `switch.myhyundai_aircon` (real Casper Electric) | ON judged success in ~32 s, OFF in ~10 s; result read from the app's push notification; 46/46 unit tests on the board |
+| Vehicle aircon via `switch.myhyundai_aircon` (real Casper Electric) | ON judged success in ~32 s, OFF in ~10 s; result read from the app's push notification; 57/57 unit tests on the board |
+| Vehicle telemetry from the widget scrape | Live on the real car: battery 93 %, range 367 km, doors locked, data timestamp matching the widget exactly, app version 1.5.1 |
+| Climate-state detection (glow analysis) | Calibrated on real captures — 0.0151 glow fraction while the app talks to the car, exactly 0.0000 at rest; reads `off` correctly on the idle vehicle |
+| Widget force-refresh at a 3-minute cadence | `data_updated_at` tracks ~1 min behind wall clock; range advanced 367→365→374 km across successive refreshes |
 | Tapo registration repeated on the venv-HA rig (192.168.31.x) | Both plugs (DormTapo1/2) registered with credential pre-check; 32 entities incl. power sensors; toggle 6/6 with initial state restored |
 | Graphite theme on the venv HA | 3 theme variants loaded from `ha_config/themes/`, "Graphite Auto" confirmed as backend default via the WebSocket API |
 
@@ -273,6 +298,16 @@ cost the most time:
   config in `/home/arduino/homeassistant`, the other HA Core in a
   venv with config in `/home/arduino/ha_config`. Probe
   `docker ps` AND `systemctl`/port 8123 before assuming paths.
+- **A headlessly onboarded HA sits on UTC**, which silently shifts
+  any timestamp parsed from on-screen text (ours landed 9 h off).
+  The REST core-config endpoint ignored the change; the WebSocket
+  `config/core/update` set `Asia/Seoul` and a restart applied it.
+- **A visual state marker may mean something broader than it
+  looks**: the MyHyundai widget's blue aura reads as "climate is
+  on", but it actually marks *any* active remote communication and
+  clears ~30 s after it settles — so a refresh tap lights it too.
+  Verify a marker in the state you are NOT testing before trusting
+  it.
 
 ## Conventions
 
