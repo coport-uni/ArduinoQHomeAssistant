@@ -1,0 +1,135 @@
+# Dashboard config for the UNO Q on-board LEDs.
+#
+# The auto-generated Overview renders a light as one Entities-card row,
+# which shows only a toggle -- colour and brightness hide behind the
+# more-info dialog. This dashboard puts those controls on the surface.
+#
+# Install with claude_test/ha_add_dashboard.py; the dashboard lives at
+# /uno-q and Overview is left auto-generated.
+views:
+  - title: LEDs
+    path: leds
+    icon: mdi:led-on
+    cards:
+      - type: markdown
+        content: >-
+          **LED3** is the only user LED with PWM channels behind it
+          (pwm5 ch1-3, 500 Hz), so it takes any of 16.7 M colours at any
+          brightness.
+
+
+          **LED4** is GPIO-only. Its colour is quantized to the eight
+          on/off combinations below, and lowering its brightness dims it
+          by dropping channels rather than smoothly.
+
+      - type: light
+        entity: light.uno_q_mcu_led3
+        name: LED3 — full colour
+
+      - type: tile
+        entity: light.uno_q_mcu_led3
+        name: LED3 brightness
+        features:
+          - type: light-brightness
+
+      - type: light
+        entity: light.uno_q_mcu_led4
+        name: LED4 — 8 colours
+
+      - type: grid
+        columns: 4
+        square: false
+        cards:
+          - type: button
+            name: Red
+            icon: mdi:circle
+            icon_height: 32px
+            tap_action:
+              action: perform-action
+              perform_action: light.turn_on
+              target:
+                entity_id: light.uno_q_mcu_led4
+              data:
+                rgb_color: [255, 0, 0]
+                brightness: 255
+          - type: button
+            name: Green
+            icon: mdi:circle
+            icon_height: 32px
+            tap_action:
+              action: perform-action
+              perform_action: light.turn_on
+              target:
+                entity_id: light.uno_q_mcu_led4
+              data:
+                rgb_color: [0, 255, 0]
+                brightness: 255
+          - type: button
+            name: Blue
+            icon: mdi:circle
+            icon_height: 32px
+            tap_action:
+              action: perform-action
+              perform_action: light.turn_on
+              target:
+                entity_id: light.uno_q_mcu_led4
+              data:
+                rgb_color: [0, 0, 255]
+                brightness: 255
+          - type: button
+            name: Yellow
+            icon: mdi:circle
+            icon_height: 32px
+            tap_action:
+              action: perform-action
+              perform_action: light.turn_on
+              target:
+                entity_id: light.uno_q_mcu_led4
+              data:
+                rgb_color: [255, 255, 0]
+                brightness: 255
+          - type: button
+            name: Cyan
+            icon: mdi:circle
+            icon_height: 32px
+            tap_action:
+              action: perform-action
+              perform_action: light.turn_on
+              target:
+                entity_id: light.uno_q_mcu_led4
+              data:
+                rgb_color: [0, 255, 255]
+                brightness: 255
+          - type: button
+            name: Magenta
+            icon: mdi:circle
+            icon_height: 32px
+            tap_action:
+              action: perform-action
+              perform_action: light.turn_on
+              target:
+                entity_id: light.uno_q_mcu_led4
+              data:
+                rgb_color: [255, 0, 255]
+                brightness: 255
+          - type: button
+            name: White
+            icon: mdi:circle
+            icon_height: 32px
+            tap_action:
+              action: perform-action
+              perform_action: light.turn_on
+              target:
+                entity_id: light.uno_q_mcu_led4
+              data:
+                rgb_color: [255, 255, 255]
+                brightness: 255
+          - type: button
+            name: "Off"
+            icon: mdi:circle-outline
+            icon_height: 32px
+            tap_action:
+              action: perform-action
+              perform_action: light.turn_off
+              target:
+                entity_id: light.uno_q_mcu_led4

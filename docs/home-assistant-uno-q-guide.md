@@ -472,6 +472,31 @@ LED4 (PH13/14/15) has no PWM mapping, so it is driven with
 combinations; lowering its brightness dims it by dropping channels
 rather than smoothly.
 
+### 9f. Getting the colour controls onto a dashboard
+
+A freshly onboarded HA has an auto-generated `Overview`, which renders
+each light as one Entities-card row — and that row shows **only a
+toggle**. The colour wheel and brightness slider are one click deeper,
+in the more-info dialog behind the entity name. Nothing is wrong with
+the entity; it is easy to conclude HA can only switch the LED on and
+off.
+
+Rather than taking control of `Overview` (which permanently disables
+auto-generation for every entity added later), add a separate
+dashboard:
+
+```bash
+scp claude_test/ha_add_dashboard.py     apps/ha-dashboard/unoq-leds.yaml unoq:/home/arduino/
+ssh unoq '/home/arduino/ha_venv/bin/python3     /home/arduino/ha_add_dashboard.py     --config /home/arduino/unoq-leds.yaml     --url-path uno-q --title "UNO Q"'
+```
+
+It appears in the sidebar as "UNO Q" (`/uno-q`) with a light card per
+LED, an inline brightness slider for LED3, and one-tap buttons for
+LED4's eight colours. Two gotchas: `url_path` must contain a hyphen or
+HA rejects it, and `.storage/lovelace_dashboards` lags the live state
+by a few seconds — verify with the `lovelace/dashboards/list`
+WebSocket command, not the file.
+
 The trap worth remembering: `analogWrite()` in this core only calls
 `pwm_set_pulse_dt()` and never re-applies pinctrl. Once a pad has been
 configured for GPIO — one `pinMode()` or `digitalWrite()` is enough —

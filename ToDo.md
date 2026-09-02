@@ -1417,3 +1417,63 @@ KEEP the existing CPU/memory bar display on the matrix unchanged.
   board — they report `max_brightness=1` and were never lit for a
   visual check.
 
+
+## 2026-09-02 — Surface the LED colour controls on a dashboard
+
+Requested by user ("지금 보니 led 껐다키는 것 만 HA 노출되어있는데
+RGB 모두 제어할 수 있게 해줘"). Diagnosis first: the entities are
+already full RGB lights — `light.uno_q_mcu_led3` and
+`light.uno_q_mcu_led4` both report `supported_color_modes: ["rgb"]`
+and `supported_features: 40`, and driving them with `rgb_color` and
+`brightness` over the REST API reaches the hardware. What the user is
+seeing is the main `Overview`, which is an AUTO-GENERATED dashboard:
+its Entities card renders a light as a single row with a toggle, and
+the colour wheel and brightness slider only appear in the more-info
+dialog behind the entity name. The only custom dashboard on this rig
+is `Map`.
+
+User decision: add a new dedicated dashboard rather than taking
+control of `Overview` (taking control would permanently stop
+auto-generation for every future entity). (see LP §3)
+
+- [x] Dashboard config as version-controlled YAML in the repo, with
+      a `light` card per LED plus one-tap colour buttons for LED4
+- [x] Installer script that creates the dashboard and saves its
+      config over the HA WebSocket API
+- [x] Install on the board and verify the dashboard renders with the
+      colour controls visible without opening more-info
+- [x] Document where the colour controls live in the auto-generated
+      Overview too, so the original confusion is recorded
+- [x] Record results below
+
+### Results (2026-09-02)
+
+- Root cause confirmed as UI-only. Nothing was wrong with the
+  entities: both already reported `supported_color_modes: ["rgb"]`
+  and `supported_features: 40`, and REST calls with `rgb_color` +
+  `brightness` reached the hardware. `lovelace_dashboards` held just
+  one item (`Map`), so the main Overview was the auto-generated
+  strategy dashboard, whose Entities-card row for a light shows only
+  a toggle.
+- New `/uno-q` dashboard ("UNO Q" in the sidebar, storage mode), one
+  view with 5 cards: a markdown note explaining the LED3/LED4
+  difference, a `light` card per LED, an inline `light-brightness`
+  tile for LED3, and a 4-column grid of 8 one-tap colour buttons for
+  LED4. Overview is untouched and still auto-generates.
+- `claude_test/ha_add_dashboard.py` does both WebSocket steps
+  (`lovelace/dashboards/create` + `lovelace/config/save`) and is
+  idempotent: an existing url_path is reused and its config
+  overwritten.
+- Button payloads verified end to end before handing over — the Cyan
+  button's exact service data produced `led4 -> ON (0, 255, 255)` in
+  the bridge log, and the Off button `led4 -> OFF (0, 0, 0)`.
+- User confirmed the dashboard renders with the colour and brightness
+  controls visible.
+- Two gotchas recorded in claude_test/README.md and guide §9f:
+  `url_path` must contain a hyphen or HA rejects it, and
+  `.storage/lovelace_dashboards` lags the live state by seconds — the
+  file still showed only `Map` right after a successful create, so
+  verify with `lovelace/dashboards/list` instead.
+- GitHub issue #42, branch feature/unoq-led-dashboard, stacked on the
+  still-open PR #41 (its entity ids are what the dashboard targets).
+

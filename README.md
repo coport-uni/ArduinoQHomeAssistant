@@ -175,6 +175,7 @@ Two consequences that surprise R4 users most:
 | `tests/` | Production unit tests for the custom component (pytest-homeassistant-custom-component) |
 | `apps/ha-mcu-bridge/` | App Lab app: MCU sketch (LED + pin RPC) + Python MQTT bridge with HA Discovery; `python/led_color.py` holds the colour/brightness maths |
 | `apps/mosquitto/mosquitto.conf` | MQTT broker config (host-local listeners, nothing on the LAN) |
+| `apps/ha-dashboard/unoq-leds.yaml` | Dashboard putting the LED colour/brightness controls on the surface, installed with `claude_test/ha_add_dashboard.py` |
 | `claude_test/` | Working diagnostic scripts (subnet Tapo probe, HA onboarding/auth/registration, toggle tester) — each documented in its README |
 | `external/CommonClaude` | Shared engineering conventions (git submodule) |
 | `CLAUDE.md`, `ToDo.md`, `LearnedPatterns.md` | Project conventions, cumulative task log, and lessons learned |
