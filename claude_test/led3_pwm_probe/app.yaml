@@ -1,0 +1,7 @@
+# Probe app for issue #40: does analogWrite() PWM actually reach the
+# LED3 RGB pads (PH10-12), which the Zephyr gpio-leds driver also claims?
+name: led3_pwm_probe
+description: "Verify PWM (analogWrite) control of the LED3 RGB user LED"
+icon: 
+ports: [8766]
+bricks: []
