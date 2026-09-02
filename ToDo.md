@@ -1738,3 +1738,28 @@ between them on its own.
 - `switch.myhyundai_aircon` still off throughout; no live vehicle
   command has been issued at any point.
 
+
+## 2026-09-02 — Correct the "red == aircon trigger" claim
+
+Prompted by the user asking whether going blue-or-green to red is
+what turns the aircon on. Nearly, but the earlier entries above
+overstate it, so the claim is corrected here rather than edited there
+(ToDo.md is append-only).
+
+Red is WIDER than the aircon trigger. Both read the same
+known-network list, but LED4's red is the `default:` branch of a
+`choose`, so `unavailable` and `unknown` land in it -- and those two
+are explicitly excluded from the aircon trigger. Verified on hardware:
+setting the sensor to `unavailable` and to `unknown` both drove LED4
+to `(255, 0, 0)` while the aircon template stayed False for both.
+
+So: every aircon countdown happens under a red LED, but not every red
+LED is a countdown. Three further gates sit between red and a running
+aircon -- the two-minute hold, the `switch.myhyundai_aircon` is `off`
+condition, and the component's own guards (40 % vehicle battery floor,
+cooldown, reachable phone).
+
+- [x] Verify the `unavailable`/`unknown` divergence on hardware
+- [x] Correct the wording in the LED YAML header, guide §9g/§9h, the
+      README results row and the PR #48 body
+

@@ -7,9 +7,12 @@
 # SSID, so treating unavailable/unknown as "no known network" is what
 # makes the indicator useful.
 #
-# Red therefore lights exactly when away-car-aircon.yaml is counting
-# down to starting the vehicle, so the two files share the same list
-# of known networks and have to be edited together.
+# Red covers away-car-aircon.yaml's trigger but is slightly wider than
+# it: both share the same list of known networks, and the two files
+# have to be edited together, but red also shows for `unavailable` and
+# `unknown`, which deliberately do NOT start the car. A red LED means
+# "not at any known network"; only a red caused by a real SSID (or by
+# `<not connected>`) is also a car counting down.
 #
 # The SSID comes from the Home Assistant companion app on the phone; it
 # reports "<not connected>" when WiFi is off, which falls into the same

@@ -611,9 +611,12 @@ than a fourth SSID, and "no known network" is exactly what the
 indicator should show then. Adding a network is one more list entry
 or one more branch; the default never needs touching.
 
-Red therefore lights precisely when §9h's automation starts counting
-down to the car, which is the point of keeping the two lists the
-same.
+Red is *almost* the aircon trigger from §9h, and the difference is
+worth holding on to: both use the same known-network list, but red
+also shows while the sensor is `unavailable` or `unknown`, and those
+two states deliberately do not start the car. So every countdown to
+the car happens under a red LED, but not every red LED is a
+countdown — a red caused by the companion app going quiet is not.
 
 It has three triggers, and the third is the non-obvious one:
 
@@ -681,10 +684,11 @@ Four things in those five lines are load-bearing:
   departure.
 
 The list is duplicated in `phone-wifi-led4.yaml`, which colours LED4
-from the same sensor and shows red for exactly this set. YAML has no
-constants, and hiding the list behind a helper entity buys less than
-it costs — but the two files have to be edited together, and a red
-LED is the visible check that they still agree.
+from the same sensor and shows red for this set plus `unavailable`
+and `unknown`. YAML has no constants, and hiding the list behind a
+helper entity buys less than it costs — but the two files have to be
+edited together, and a red LED is the visible check that they still
+agree.
 
 **Testing an automation whose action is a real vehicle.** Do not fire
 it and watch. Install `claude_test/away_trigger_probe.yaml` first: it
