@@ -1300,3 +1300,19 @@ task, no repo code involved.
   choice); health was verified from logs and systemd instead.
   Next API-driven work needs either the new password (to mint a
   token) or a token created in the UI.
+
+### Follow-up (2026-09-02): password reset on user request
+
+The user could not log in with their own new password either and
+asked for a reset. Repeated the offline procedure: HA stopped,
+`hass --script auth change_password arduino arduino`, HA started
+(HTTP 200). Login verified, fresh 10-year token minted over the
+websocket (client unoq-cli-20260902) into ~/.ha_token, API check
+200. Entities healthy: 11 myhyundai + 32 tapo of 61 total;
+vehicle_range briefly read unknown on the first post-restart poll
+(the scrape landed mid-refresh while the coordinator had no prior
+snapshot to fall back on, so the incomplete-scrape guard could not
+apply) and recovered to 374 km on the next 3-minute cycle —
+cosmetic, self-healing, worth a guard tweak only if it recurs.
+Password is `arduino` again; user advised to change it in the UI
+and hand over a token if they want API work to keep working.
