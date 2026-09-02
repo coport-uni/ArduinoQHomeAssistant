@@ -1477,3 +1477,123 @@ auto-generation for every future entity). (see LP §3)
 - GitHub issue #42, branch feature/unoq-led-dashboard, stacked on the
   still-open PR #41 (its entity ids are what the dashboard targets).
 
+
+
+## 2026-09-02 — Green LED4 when the phone is off the dorm WiFi
+
+Requested by user ("내 스마트폰의 와이파이가 이름이 XiaomiDorm55가
+아니면 아두이노의 LED4를 녹색으로 빛나게해줘"). The phone already
+reports its SSID to HA through the companion app:
+`sensor.sm_f966n_wi_fi_connection` (currently `WUNIST_AAA`), so no new
+integration is needed — only an automation driving
+`light.uno_q_mcu_led4`.
+
+Two behaviours confirmed with the user before starting:
+- Back on `XiaomiDorm55` -> LED4 **blue**, not off.
+- No WiFi at all (LTE only, `unavailable`/`unknown`) counts as "not
+  XiaomiDorm55" -> **green**. The condition is a literal SSID mismatch.
+
+Blocker found while surveying: `configuration.yaml` on the board is the
+scripted minimal one (`default_config:` + themes) and never got the
+standard `automation: !include automations.yaml` line, so HA loads zero
+automations no matter what the UI writes.
+
+- [x] Version-controlled automation YAML in the repo, next to the
+      dashboard config (`apps/ha-automations/`)
+- [x] Add the missing `automation:` include to the board's
+      `configuration.yaml` (back it up first, as in the 2026-09-02
+      shell_command removal)
+- [x] Installer script under `claude_test/` that pushes the automation
+      over the HA REST config API and reloads it
+- [x] Verify on the real hardware through the webcam pointed at the
+      board: force both SSID values and confirm blue vs green
+- [x] Update README.md / docs and append any new lesson to
+      LearnedPatterns.md
+- [x] Record results below
+
+### Results (2026-09-02)
+
+- GitHub issue #44, branch feature/phone-wifi-led4, stacked on
+  feature/unoq-led-dashboard (PR #43) because the automation targets
+  `light.uno_q_mcu_led4`, which arrives with the still-open PR #41.
+- The blocker was real and silent: with only `default_config:` in
+  `configuration.yaml`, the config API returned `{"result": "ok"}` and
+  wrote `automations.yaml`, but HA never read the file. Adding
+  `automation: !include automations.yaml` (backup
+  `configuration.yaml.bak-20260902-automation`) plus an empty
+  `automations.yaml` fixed it; `check_config` returned `valid` and
+  `automation.reload` was enough -- no restart required.
+  `ha_add_automation.py` now re-reads the entity list after the reload
+  and fails loudly if the automation did not appear, so the same
+  silent failure cannot repeat.
+- A third trigger was added after the first restart test: MQTT
+  Discovery re-created the light entities roughly 20 s AFTER
+  `homeassistant.start` fired, so the start trigger alone cannot be
+  trusted to restore the colour. The automation now also triggers on
+  `light.uno_q_mcu_led4` leaving `unavailable`, which additionally
+  covers the App Lab app restarting by itself (the sketch turns both
+  LEDs off in `setup()`).
+- Verified on the real board through the webcam on the user's PC
+  (`claude_test/cam_snap.py`), with the SSID forced through the REST
+  API since the user was away:
+  - `XiaomiDorm55` -> `led4 -> ON (0, 0, 255)`, blue in the frame.
+  - `<not connected>` -> `led4 -> ON (0, 255, 0)`, green in the frame.
+  - real value `WUNIST_AAA` restored -> green, as intended.
+  - full HA restart -> automation reloaded from the include and
+    LED4 green, no errors in the log.
+  - full App Lab bridge restart (MCU re-flash included) -> the
+    availability trigger re-applied green within seconds; confirmed
+    both in the bridge log and on camera.
+- The webcam capture path cost two dead ends worth recording:
+  `ffmpeg -f dshow` on this host rejects every explicit
+  `-video_size`/`-framerate` ("Could not set video options") and its
+  default mode is 160x120; OpenCV's DSHOW backend opens fine but
+  ignores the size properties too, yielding 640x480 regardless of what
+  is requested. 640x480 turned out to be plenty to read one LED.
+- Ruff clean on both new scripts. No unit tests added: the change is
+  declarative YAML plus two one-off installer/diagnostic scripts, and
+  the behaviour was verified against the hardware instead.
+
+
+## 2026-09-02 — Third colour: red when off both known networks
+
+Requested by user ("TP-Link_0624를 녹색으로 하고 이 2개의 wifi가
+아님 빨강이도록 자동화 스크립트를 구성해줘"). The indicator gains a
+third state, so it now distinguishes "which known network" from "no
+known network" instead of only "dorm or not":
+
+- `XiaomiDorm55` -> blue (unchanged)
+- `TP-Link_0624` -> green (was the catch-all colour)
+- anything else, including no WiFi at all -> red (new)
+
+Continues issue #44 on the same branch rather than opening a new one:
+PR #45 is still open and this edits the very file it introduces, so a
+separate stacked PR would only fragment the review.
+
+- [x] Add the TP-Link_0624 branch and repoint the default to red
+- [x] Reinstall on the board and verify all three colours on camera
+- [x] Update the guide, README and PR/issue text
+- [x] Record results below
+
+### Results (2026-09-02)
+
+- The `choose` gained a second branch (`TP-Link_0624` -> green) and
+  the `default:` became red, so "no known network" now reads
+  differently from "the other known network". Adding a third network
+  later is one more branch and no change to the default.
+- Verified on the board through the webcam, forcing the SSID over the
+  REST API:
+  - `XiaomiDorm55` -> `(0, 0, 255)`, blue on camera.
+  - `TP-Link_0624` -> `(0, 255, 0)`, green on camera.
+  - `<not connected>` -> `(255, 0, 0)`, red on camera.
+  - `OtherCafeWiFi` (an SSID the automation has never seen) ->
+    `(255, 0, 0)`, confirming the default branch is not just the
+    disconnected case.
+- Worth remembering: `automation.reload` installs the new config but
+  does NOT re-run it, so LED4 kept the colour the previous version
+  had set. It looked correct here only because the phone was on
+  TP-Link_0624, which is green under both versions -- the three
+  colours had to be forced individually to actually prove anything.
+- Committed onto the existing branch and PR #45 rather than opening
+  a second stacked PR; issue #44 and the PR body were updated to the
+  three-colour behaviour.

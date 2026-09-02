@@ -49,6 +49,18 @@ detection, #2 reproducibility guide, #3 WiFi + VS Code Remote-SSH,
   says so. **Rule**: Never treat an off-state 0 W reading as proof
   that a smart plug has no load. (from ToDo#8)
 
+- **Problem**: A Home Assistant automation saved successfully through
+  the config API never ran, and no error appeared anywhere. **Cause**:
+  `configuration.yaml` built by this repo's onboarding scripts holds
+  only `default_config:` and the themes include, missing the stock
+  `automation: !include automations.yaml` line -- so HA writes
+  `automations.yaml` happily and then never reads it. **Fix**: Append
+  the include (after backing the file up), create an empty
+  `automations.yaml`, and call `automation.reload`; no restart needed.
+  **Rule**: Always confirm an automation appeared as an
+  `automation.*` entity after installing it -- a "result: ok" from the
+  config API only means the file was written. (from ToDo#44)
+
 ## §3. Library Quirks
 
 - **Problem**: `arduino-app-cli app ps` crashes with `panic: not
@@ -157,6 +169,18 @@ detection, #2 reproducibility guide, #3 WiFi + VS Code Remote-SSH,
   link error against a core-internal helper; check the devicetree
   and the exported symbol table separately. (from ToDo#40)
 
+- **Problem**: An automation triggered by `homeassistant.start` can
+  fire before the entity it drives exists. **Cause**: MQTT Discovery
+  re-creates the bridge's light entities from retained config topics
+  *after* the start event -- ~20 s into a restart on this board.
+  **Fix**: Add a second trigger on the target entity leaving
+  `unavailable`, which also covers the App Lab app restarting on its
+  own (the sketch turns both LEDs off in `setup()`, and the MQTT LWT
+  makes the entity unavailable meanwhile). **Rule**: Never rely on
+  `homeassistant.start` alone to restore state on an MQTT-discovered
+  entity; trigger on its recovery from `unavailable` too.
+  (from ToDo#44)
+
 ## §4. Workflow Lessons
 
 - **Problem**: CLAUDE.md §4 requires GitHub issue/branch/PR but the repo
@@ -173,6 +197,15 @@ detection, #2 reproducibility guide, #3 WiFi + VS Code Remote-SSH,
   **Rule**: Always prefer `bash -s` over-SSH streaming for repo-local
   board scripts; copy only files that must persist on the board.
   (from ToDo#8)
+
+- **Problem**: Hardware behaviour needed confirming while the user was
+  out of the room. **Cause**: LED colour is only observable on the
+  physical board. **Fix**: Drive the input through the REST API
+  (overwriting a companion-app sensor's state is temporary -- the phone
+  pushes its real value back on the next update) and read the result
+  off a webcam pointed at the board (`claude_test/cam_snap.py`).
+  **Rule**: Always look for an existing camera on the rig before
+  reporting a hardware change as unverified. (from ToDo#44)
 
 ## §5. Environment Specifics
 

@@ -162,6 +162,7 @@ Two consequences that surprise R4 users most:
 | Widget force-refresh at a 3-minute cadence | `data_updated_at` tracks ~1 min behind wall clock; range advanced 367→365→374 km across successive refreshes |
 | Tapo registration repeated on the venv-HA rig (192.168.31.x) | Both plugs (DormTapo1/2) registered with credential pre-check; 32 entities incl. power sensors; toggle 6/6 with initial state restored |
 | Graphite theme on the venv HA | 3 theme variants loaded from `ha_config/themes/`, "Graphite Auto" confirmed as backend default via the WebSocket API |
+| LED4 as a phone-WiFi indicator | Confirmed through a webcam pointed at the board: `XiaomiDorm55` → blue, `TP-Link_0624` → green, `<not connected>` and an unknown SSID → red, and a full App Lab bridge restart → colour re-applied from the availability trigger |
 
 ## Repository layout
 
@@ -176,6 +177,7 @@ Two consequences that surprise R4 users most:
 | `apps/ha-mcu-bridge/` | App Lab app: MCU sketch (LED + pin RPC) + Python MQTT bridge with HA Discovery; `python/led_color.py` holds the colour/brightness maths |
 | `apps/mosquitto/mosquitto.conf` | MQTT broker config (host-local listeners, nothing on the LAN) |
 | `apps/ha-dashboard/unoq-leds.yaml` | Dashboard putting the LED colour/brightness controls on the surface, installed with `claude_test/ha_add_dashboard.py` |
+| `apps/ha-automations/phone-wifi-led4.yaml` | Automation turning LED4 into a phone-WiFi indicator (blue on `XiaomiDorm55`, green on `TP-Link_0624`, red on any other network or none), installed with `claude_test/ha_add_automation.py` |
 | `claude_test/` | Working diagnostic scripts (subnet Tapo probe, HA onboarding/auth/registration, toggle tester) — each documented in its README |
 | `external/CommonClaude` | Shared engineering conventions (git submodule) |
 | `CLAUDE.md`, `ToDo.md`, `LearnedPatterns.md` | Project conventions, cumulative task log, and lessons learned |
