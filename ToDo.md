@@ -1597,3 +1597,80 @@ separate stacked PR would only fragment the review.
 - Committed onto the existing branch and PR #45 rather than opening
   a second stacked PR; issue #44 and the PR body were updated to the
   three-colour behaviour.
+
+
+## 2026-09-02 — Start the car aircon when the phone leaves every
+## known WiFi
+
+Requested by user ("핸드폰이 해당 와이파이에서 끊어질때 자동차의
+공조 장치를 활성화하는거야"), building on the LED4 indicator. Turns
+`switch.myhyundai_aircon` on when the phone's SSID has been outside
+every known network for a sustained period.
+
+Three things were settled before writing anything:
+
+- **Which networks count as "known"**: the user first said "either of
+  the two", but the phone spends most of its day on `WUNIST_AAA` (the
+  lab) -- under that rule the car would start every time the user
+  arrives at the lab. Shown the evidence, the user added `WUNIST_AAA`
+  to the known list, so the trigger now means "at none of the three
+  places I normally am".
+- **Debounce: 2 minutes.** Recorder history justifies it -- at
+  12:27:31 the phone dropped to `<not connected>` and was back on
+  `TP-Link_0624` four seconds later, entirely on its own.
+- **`unavailable`/`unknown` must NOT fire.** Those mean the companion
+  app stopped reporting (phone off, app killed, HA restarting), not
+  that the phone went anywhere. Starting a car because HA lost contact
+  with a phone is the one failure mode worth engineering out.
+
+Checked and cleared: the aircon is driven over ADB from a *dedicated*
+Galaxy Z Fold3 (SM-F926N) that lives on the board's USB hub, not from
+the phone reporting the SSID (SM-F966N), so the command path does not
+leave with the user.
+
+- [x] Merge the LED stack (#41, #43/#46, #45) into main first
+- [x] Automation YAML under `apps/ha-automations/`
+- [x] Prove the trigger and the 2-minute debounce with a probe
+      automation that does NOT command the car
+- [x] Install the real automation
+- [x] Update the guide, README and claude_test index
+- [x] Record results below
+
+### Results (2026-09-02)
+
+- Merged the LED stack into main first, and it did not go cleanly:
+  #41 was squashed without deleting its head branch, so GitHub never
+  retargeted #43 and it merged into `feature/unoq-led-mqtt-lights`
+  instead of `main`. Reopened the same commits as #46 against `main`,
+  resolved the ToDo/guide/README/LearnedPatterns conflicts (every one
+  of them a pure addition on our side, main's side empty), and merged
+  #46 then #45. main now carries all three: a4f0ebf, 64f6138, 228b972.
+  Lesson: with a squash-merge stack, delete the head branch as part of
+  the merge or the PR above it lands on a branch instead of main.
+- The trigger and its hold were proved WITHOUT commanding the car, by
+  installing `claude_test/away_trigger_probe.yaml` -- identical
+  `value_template` and `for:`, but `system_log.write` as the action:
+  - 30-second absence, then back to a known network: did not fire,
+    `last_triggered` still `None`.
+  - sustained absence: fired at 13:00:18 having started at 12:58:18,
+    exactly 120 s, and not at the 60/90/115 s checkpoints.
+  Probe deleted afterwards; only the two real automations are loaded.
+- Truth table evaluated by HA's own template engine rather than by
+  reading the YAML: `XiaomiDorm55`, `TP-Link_0624`, `WUNIST_AAA`,
+  `unavailable` and `unknown` -> no trigger; `<not connected>` and
+  `CafeWiFi` -> trigger.
+- Car-side preconditions confirmed healthy before handover:
+  `binary_sensor.myhyundai_device_connected` on,
+  `sensor.myhyundai_vehicle_battery` 83 % (floor is 40 %),
+  `switch.myhyundai_aircon` off, `sensor.myhyundai_last_error` none.
+- NOT done, deliberately: no live end-to-end run. Everything up to the
+  service call is verified, but actually starting the user's car is
+  their call to make, so it was left as an explicit offer rather than
+  done unprompted.
+- Known limitation, documented in guide §9h: the SSID only reaches HA
+  while the phone has some connectivity. A phone that loses WiFi and
+  LTE together stops pushing and the sensor goes stale, so this is an
+  indicator of a reported network, not a presence detector.
+- The known-network list is duplicated between the two automation
+  files. YAML has no constants and a helper entity buys less than it
+  costs, but the files must be edited together -- noted in both.

@@ -163,6 +163,7 @@ Two consequences that surprise R4 users most:
 | Tapo registration repeated on the venv-HA rig (192.168.31.x) | Both plugs (DormTapo1/2) registered with credential pre-check; 32 entities incl. power sensors; toggle 6/6 with initial state restored |
 | Graphite theme on the venv HA | 3 theme variants loaded from `ha_config/themes/`, "Graphite Auto" confirmed as backend default via the WebSocket API |
 | LED4 as a phone-WiFi indicator | Confirmed through a webcam pointed at the board: `XiaomiDorm55` → blue, `TP-Link_0624` → green, `<not connected>` and an unknown SSID → red, and a full App Lab bridge restart → colour re-applied from the availability trigger |
+| Car aircon on leaving every known WiFi | Trigger and debounce proved with a probe automation that logs instead of commanding the car: a 30 s blip did not fire, a sustained absence fired at T+120 s exactly (12:58:18 → 13:00:18). Truth table evaluated by HA's own template engine: the three known SSIDs, `unavailable` and `unknown` → no; `<not connected>` and an unseen SSID → yes |
 
 ## Repository layout
 
@@ -178,6 +179,7 @@ Two consequences that surprise R4 users most:
 | `apps/mosquitto/mosquitto.conf` | MQTT broker config (host-local listeners, nothing on the LAN) |
 | `apps/ha-dashboard/unoq-leds.yaml` | Dashboard putting the LED colour/brightness controls on the surface, installed with `claude_test/ha_add_dashboard.py` |
 | `apps/ha-automations/phone-wifi-led4.yaml` | Automation turning LED4 into a phone-WiFi indicator (blue on `XiaomiDorm55`, green on `TP-Link_0624`, red on any other network or none), installed with `claude_test/ha_add_automation.py` |
+| `apps/ha-automations/away-car-aircon.yaml` | Automation starting the vehicle aircon once the phone has been off every known WiFi for two minutes |
 | `claude_test/` | Working diagnostic scripts (subnet Tapo probe, HA onboarding/auth/registration, toggle tester) — each documented in its README |
 | `external/CommonClaude` | Shared engineering conventions (git submodule) |
 | `CLAUDE.md`, `ToDo.md`, `LearnedPatterns.md` | Project conventions, cumulative task log, and lessons learned |
