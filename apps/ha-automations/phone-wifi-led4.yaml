@@ -1,0 +1,61 @@
+# Turn LED4 into an indicator of which WiFi the phone is on.
+#
+# Blue means the phone sits on the dorm access point; green means it is
+# anywhere else. "Anywhere else" deliberately includes having no WiFi at
+# all -- being away from the dorm usually shows up as LTE-only rather
+# than as a different SSID, so treating unavailable/unknown as "not the
+# dorm" is what makes the indicator useful.
+#
+# The SSID comes from the Home Assistant companion app on the phone; it
+# reports "<not connected>" when WiFi is off, which falls into the same
+# default branch.
+#
+# Install with claude_test/ha_add_automation.py.
+alias: Phone WiFi state on LED4
+description: >-
+  LED4 is blue while the phone is on XiaomiDorm55 and green whenever it
+  is on any other network or on no WiFi at all.
+mode: single
+
+triggers:
+  # No to/from filter: every SSID change matters, and re-applying the
+  # colour the LED already shows is harmless.
+  - trigger: state
+    entity_id: sensor.sm_f966n_wi_fi_connection
+  # Without this the LED would keep whatever colour it had before a
+  # restart until the phone next changed networks.
+  - trigger: homeassistant
+    event: start
+  # The bridge turns both LEDs off when it (re)starts, and the light
+  # entity briefly goes unavailable while that happens -- including
+  # during a Home Assistant restart, where it can come back after the
+  # start event above. Re-applying the colour on recovery closes both
+  # races.
+  - trigger: state
+    entity_id: light.uno_q_mcu_led4
+    from: unavailable
+
+conditions: []
+
+actions:
+  - choose:
+      - alias: On the dorm WiFi
+        conditions:
+          - condition: state
+            entity_id: sensor.sm_f966n_wi_fi_connection
+            state: XiaomiDorm55
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: light.uno_q_mcu_led4
+            data:
+              rgb_color: [0, 0, 255]
+              brightness: 255
+    default:
+      - alias: Any other network, or none
+        action: light.turn_on
+        target:
+          entity_id: light.uno_q_mcu_led4
+        data:
+          rgb_color: [0, 255, 0]
+          brightness: 255
