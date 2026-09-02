@@ -39,6 +39,9 @@ CONF_SCREEN_CHECK_ENABLED = "screen_check_enabled"
 CONF_SEQUENCE_TIMEOUT_SEC = "sequence_timeout_sec"
 # Read-only widget scrape cadence; 0 disables the poll entirely.
 CONF_VEHICLE_POLL_MINUTES = "vehicle_poll_minutes"
+# Tap the widget's refresh control before each scrape. May reach
+# the vehicle's telematics; the user explicitly accepted that.
+CONF_WIDGET_REFRESH_ENABLED = "widget_refresh_enabled"
 
 DEFAULT_AIRCON_MAX_MINUTES = 10
 DEFAULT_BATTERY_FLOOR_PCT = 40
@@ -51,6 +54,7 @@ DEFAULT_VEHICLE_POLL_MINUTES = 15
 
 SEQUENCE_AIRCON_OFF = "aircon_off"
 SEQUENCE_AIRCON_ON = "aircon_on"
+SEQUENCE_WIDGET_REFRESH = "widget_refresh"
 
 # Any string value still carrying this marker means the recipe has
 # not been filled in from real-device dumps yet (spec §8.5).

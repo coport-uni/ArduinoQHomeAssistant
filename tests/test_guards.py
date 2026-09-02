@@ -14,6 +14,7 @@ from custom_components.myhyundai_aircon.const import (
     CONF_COMMAND_MIN_GAP_SEC,
     CONF_COOLDOWN_SEC,
     CONF_RETRY_GAP_SEC,
+    CONF_WIDGET_REFRESH_ENABLED,
     DOMAIN,
     ERR_BATTERY_LOW,
     ERR_COOLDOWN,
@@ -27,6 +28,7 @@ from custom_components.myhyundai_aircon.coordinator import (
     MyHyundaiCoordinator,
 )
 from custom_components.myhyundai_aircon.executor import SequenceError
+from custom_components.myhyundai_aircon.vehicle_data import VehicleData
 
 SUCCESS_RESULT = {
     "sequence": "aircon_on",
@@ -160,6 +162,48 @@ async def test_non_retryable_fails_once_and_dumps(
     assert coordinator.last_result == "failure"
     assert coordinator.last_error == ERR_UNKNOWN_SCREEN
     assert events[0].data["code"] == ERR_UNKNOWN_SCREEN
+
+
+async def test_widget_refresh_runs_before_scrape(
+    hass: HomeAssistant,
+) -> None:
+    """The refresh sequence runs before scraping when enabled."""
+    coordinator, executor = _make_coordinator(
+        hass, QUIET_OPTIONS | {CONF_WIDGET_REFRESH_ENABLED: True}
+    )
+    executor.async_snapshot_home_nodes = AsyncMock(return_value=[])
+    executor.recipe.sequences.get.return_value = MagicMock(
+        steps=(1,), has_placeholders=False
+    )
+    await coordinator._maybe_poll_vehicle_data()
+    executor.async_run_sequence.assert_awaited_with("widget_refresh")
+    # Settled snapshot (glow) + post-refresh re-read = two snapshots.
+    assert executor.async_snapshot_home_nodes.await_count == 2
+
+
+async def test_widget_refresh_off_by_default(
+    hass: HomeAssistant,
+) -> None:
+    """Without the option the refresh sequence never runs."""
+    coordinator, executor = _make_coordinator(hass, QUIET_OPTIONS)
+    executor.async_snapshot_home_nodes = AsyncMock(return_value=[])
+    await coordinator._maybe_poll_vehicle_data()
+    executor.async_run_sequence.assert_not_awaited()
+    executor.async_snapshot_home_nodes.assert_awaited_once()
+
+
+async def test_incomplete_scrape_keeps_previous_data(
+    hass: HomeAssistant,
+) -> None:
+    """A mid-refresh scrape must not wipe data or flip climate."""
+    coordinator, executor = _make_coordinator(hass, QUIET_OPTIONS)
+    coordinator.vehicle_data = VehicleData(
+        battery_pct=93, range_km=367, doors_locked=True
+    )
+    executor.async_snapshot_home_nodes = AsyncMock(return_value=[])
+    await coordinator._maybe_poll_vehicle_data()
+    assert coordinator.vehicle_data.battery_pct == 93
+    assert coordinator.vehicle_data.range_km == 367
 
 
 async def test_success_event_payload(hass: HomeAssistant) -> None:

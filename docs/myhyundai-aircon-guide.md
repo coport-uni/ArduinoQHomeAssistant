@@ -131,9 +131,18 @@ notification wait limit is set per-step in the recipe instead.
 The vehicle sensors come from a **read-only widget scrape** (wake →
 home → UI dump → parse) every `vehicle_poll_minutes` (default 15,
 0 disables), serialized behind the sequence lock and never sending
-a vehicle command. A failed scrape keeps the previous values. The
-widget's refresh control is deliberately never tapped — it may ping
-the vehicle.
+a vehicle command. A failed scrape keeps the previous values.
+
+**Force-refresh** (`widget_refresh_enabled`, default off): when on,
+each poll first taps the widget's refresh control so the data is
+freshly fetched before scraping. This DOES reach the vehicle's
+telematics and, done frequently, can drain the 12 V battery — only
+enable it if you accept that (recommend a poll interval of a few
+minutes at least). Climate glow is measured from the settled widget
+*before* the refresh tap, because the refresh itself lights the
+same blue aura for ~30 s (the aura marks active remote
+communication, not climate alone — a live finding); the fresh data
+is read *after* the refresh.
 
 | Service | Purpose |
 |---|---|
