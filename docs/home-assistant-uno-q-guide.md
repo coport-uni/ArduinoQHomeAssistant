@@ -547,6 +547,79 @@ a 20 s four-core stress (`for i in 1 2 3 4; do timeout 20 yes
 > /dev/null & done`) visibly grows the CPU bar and it shrinks back
 after, while the HA switch path keeps passing 6/6 (section 9d test).
 
+### 9g. Automations: LED4 as a phone-WiFi indicator
+
+The Home Assistant companion app publishes the phone's SSID as
+`sensor.<device>_wi_fi_connection` (here
+`sensor.sm_f966n_wi_fi_connection`), so an at-a-glance "am I on the
+dorm network?" light needs no new integration -- only an automation
+driving `light.uno_q_mcu_led4`.
+
+**Check this first.** A configuration.yaml built by the onboarding
+scripts in this repo contains only `default_config:` and the themes
+include. The stock file that ships with a manual HA install also has
+
+```yaml
+automation: !include automations.yaml
+```
+
+and without that line HA loads **zero** automations no matter what the
+UI editor or the config API writes -- both happily save into
+`automations.yaml` and report success. Add it (backing the file up
+first), create an empty `automations.yaml`, and `automation.reload`
+picks it up without a restart:
+
+```bash
+ssh unoq 'cd /home/arduino/ha_config
+cp configuration.yaml configuration.yaml.bak-$(date +%Y%m%d)
+grep -q "^automation:" configuration.yaml ||
+    printf "
+automation: !include automations.yaml
+" >> configuration.yaml
+[ -f automations.yaml ] || echo "[]" > automations.yaml'
+```
+
+Then push the automation from the repo:
+
+```bash
+scp claude_test/ha_add_automation.py     apps/ha-automations/phone-wifi-led4.yaml unoq:/home/arduino/
+ssh unoq '/home/arduino/ha_venv/bin/python3     /home/arduino/ha_add_automation.py     --config /home/arduino/phone-wifi-led4.yaml --id phone_wifi_led4'
+# expect: loaded as automation.phone_wifi_state_on_led4 (on)
+```
+
+The installer re-reads the entity list after reloading and fails
+loudly if the automation did not turn up, which is exactly what a
+missing include looks like.
+
+The automation itself is blue on `XiaomiDorm55` and green on anything
+else -- including `<not connected>`, `unavailable`, and `unknown`,
+since being away from that network usually means no WiFi at all
+rather than a different SSID.
+
+It has three triggers, and the third is the non-obvious one:
+
+- the SSID sensor changing state,
+- `homeassistant.start`,
+- `light.uno_q_mcu_led4` leaving `unavailable`.
+
+The bridge's sketch turns both LEDs off in `setup()`, and the light
+entity goes unavailable (MQTT LWT) whenever the App Lab app restarts,
+so without the third trigger the LED sits dark until the phone next
+changes networks. It also covers a race the second trigger cannot: MQTT
+Discovery can re-create the light entity *after* `homeassistant.start`
+fires, which is what happens on this board -- the LEDs reappeared ~20 s
+into a restart here.
+
+Testing it without moving the phone: overwrite the sensor state through
+the REST API. The companion app pushes its real value back on the next
+update, so the change is temporary.
+
+```bash
+ssh unoq 'TOKEN=$(cat /home/arduino/.ha_token)
+curl -s -X POST http://localhost:8123/api/states/sensor.sm_f966n_wi_fi_connection   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json"   -d "{\"state\":\"XiaomiDorm55\"}"'
+# expect in the bridge log: led4 -> ON (0, 0, 255)
+```
+
 ## 10. Troubleshooting
 
 | Symptom | Cause / Fix |
