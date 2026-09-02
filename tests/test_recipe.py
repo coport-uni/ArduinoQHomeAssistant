@@ -56,6 +56,11 @@ def test_shipped_default_recipe_is_complete() -> None:
         assert taps[0].params["match"]["content_desc"] == target
         awaits = [s for s in sequence.steps if s.action == "await_notification"]
         assert awaits[0].params["success_contains"] == [success]
+    refresh = recipe.sequences["widget_refresh"]
+    assert not refresh.has_placeholders
+    assert refresh.steps
+    taps = [s for s in refresh.steps if s.action == "tap_node"]
+    assert taps[0].params["match"]["text_contains"] == "기준"
 
 
 def test_minimal_recipe_loads_with_defaults(tmp_path: Path) -> None:

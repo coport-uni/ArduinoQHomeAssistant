@@ -38,6 +38,7 @@ from .const import (
     CONF_SCREEN_CHECK_ENABLED,
     CONF_SEQUENCE_TIMEOUT_SEC,
     CONF_VEHICLE_POLL_MINUTES,
+    CONF_WIDGET_REFRESH_ENABLED,
     DEFAULT_ADBKEY_FILENAME,
     DEFAULT_AIRCON_MAX_MINUTES,
     DEFAULT_BATTERY_FLOOR_PCT,
@@ -150,10 +151,10 @@ def _positive_int_selector(maximum: int) -> selector.NumberSelector:
 _OPTIONS_SCHEMA = vol.Schema(
     {
         vol.Optional(CONF_RECIPE_FILE, default=DEFAULT_RECIPE_FILE): str,
-        vol.Optional(CONF_BATTERY_SENSOR, default=""): (
-            selector.EntitySelector(
-                selector.EntitySelectorConfig(domain="sensor")
-            )
+        # No default: an empty EntitySelector value must simply be
+        # absent, or its "" fails entity-id validation on submit.
+        vol.Optional(CONF_BATTERY_SENSOR): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="sensor")
         ),
         vol.Optional(
             CONF_BATTERY_FLOOR_PCT,
@@ -186,6 +187,7 @@ _OPTIONS_SCHEMA = vol.Schema(
             CONF_VEHICLE_POLL_MINUTES,
             default=DEFAULT_VEHICLE_POLL_MINUTES,
         ): vol.All(_positive_int_selector(1440), vol.Coerce(int)),
+        vol.Optional(CONF_WIDGET_REFRESH_ENABLED, default=False): bool,
     }
 )
 

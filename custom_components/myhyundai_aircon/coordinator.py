@@ -45,6 +45,7 @@ from .const import (
     CONF_SCREEN_CHECK_ENABLED,
     CONF_SEQUENCE_TIMEOUT_SEC,
     CONF_VEHICLE_POLL_MINUTES,
+    CONF_WIDGET_REFRESH_ENABLED,
     COORDINATOR_INTERVAL_S,
     DEFAULT_BATTERY_FLOOR_PCT,
     DEFAULT_COMMAND_MIN_GAP_SEC,
@@ -61,6 +62,7 @@ from .const import (
     ERR_VEHICLE_FAIL,
     EVENT_RESULT,
     RECONNECT_BACKOFF_S,
+    SEQUENCE_WIDGET_REFRESH,
 )
 from .executor import SequenceError, SequenceExecutor
 
@@ -332,29 +334,69 @@ class MyHyundaiCoordinator(DataUpdateCoordinator[bool]):
             and now - self._last_vehicle_poll_monotonic < minutes * 60
         ):
             return
+        package = self.executor.recipe.package
         try:
-            nodes = await self.executor.async_snapshot_home_nodes(
+            # First snapshot is the SETTLED widget (before any
+            # refresh); its screenshot is where climate glow is
+            # judged. Live finding 2026-09-02: the blue aura marks
+            # active remote communication, so a refresh tap lights
+            # it transiently — judging glow post-refresh would false
+            # positive. Data is read from the freshest nodes below.
+            settled_nodes = await self.executor.async_snapshot_home_nodes(
                 screenshot_path=self._poll_screenshot_path
             )
+            await self._detect_climate_glow(settled_nodes, package)
+            nodes = settled_nodes
+            if await self._maybe_refresh_widget():
+                nodes = await self.executor.async_snapshot_home_nodes()
             version_line = await self.client.async_shell(
-                "dumpsys package"
-                f" {self.executor.recipe.package}"
-                " | grep versionName"
+                f"dumpsys package {package} | grep versionName"
             )
         except (SequenceError, AdbClientError) as err:
             _LOGGER.warning("Vehicle data poll skipped: %s", err)
             return
         self._last_vehicle_poll_monotonic = now
-        package = self.executor.recipe.package
-        self.vehicle_data = parse_vehicle_data(nodes, package, dt_util.now())
+        new_data = parse_vehicle_data(nodes, package, dt_util.now())
         self.app_version = parse_app_version(version_line)
-        await self._detect_climate_glow(nodes, package)
+        if (
+            new_data.battery_pct is None or new_data.range_km is None
+        ) and self.vehicle_data.battery_pct is not None:
+            # The widget was mid-refresh (fields hidden): keep the
+            # previous snapshot rather than blanking the sensors.
+            _LOGGER.debug("Incomplete widget scrape; keeping previous data")
+            return
+        self.vehicle_data = new_data
         _LOGGER.debug(
             "Vehicle data: %s climate_running=%s glow=%s",
             self.vehicle_data,
             self.climate_running,
             self.glow_fraction,
         )
+
+    async def _maybe_refresh_widget(self) -> bool:
+        """Tap the widget's refresh control before scraping data.
+
+        Only when the widget_refresh_enabled option is on and the
+        recipe defines a runnable widget_refresh sequence. A busy
+        executor (a command in flight) or any step failure degrades
+        to scraping whatever the widget already shows.
+
+        Returns:
+            True when a refresh actually ran, so the caller re-reads
+            the now-fresher widget.
+        """
+        if not self._option(CONF_WIDGET_REFRESH_ENABLED, False):
+            return False
+        assert self.executor is not None
+        sequence = self.executor.recipe.sequences.get(SEQUENCE_WIDGET_REFRESH)
+        if sequence is None or not sequence.steps or sequence.has_placeholders:
+            return False
+        try:
+            await self.executor.async_run_sequence(SEQUENCE_WIDGET_REFRESH)
+        except SequenceError as err:
+            _LOGGER.debug("Widget refresh skipped: %s", err)
+            return False
+        return True
 
     async def _detect_climate_glow(self, nodes, package: str) -> None:
         """Judge the climate state from the widget's glow aura.

@@ -1194,3 +1194,56 @@ negative result and keep the switch optimistic.
   detection stands on the real calibration captures. Cost: one
   aircon on/off cycle, vehicle restored. GitHub issue #34, branch
   feature/myhyundai-climate-state.
+
+## 2026-09-02 — Widget force-refresh every 3 minutes
+
+Requested by user; the 12V/telematics drain concern was explicitly
+waived by them ("텔레매틱스로 인한 배터리 고갈은 문제없을 것
+같아. 명령을 보낼때를 제외하고 3분마다 갱신하도록 해줘"). Design:
+a new data-only "widget_refresh" recipe sequence taps the widget's
+timestamp/refresh control (text_contains "기준" — present in every
+dump; the clickable parent area covers it); the coordinator runs it
+at the top of each vehicle poll when the new widget_refresh_enabled
+option is on, THEN scrapes, so sensors always read post-refresh
+data. Runs through the executor lock, so an in-flight command makes
+the refresh (and poll) skip — exactly the requested "except while
+commanding". Refresh failures degrade to scraping stale data. Live
+options set to vehicle_poll_minutes=3 + widget_refresh_enabled.
+
+- [x] recipes/default.json: widget_refresh sequence (data-only,
+      taps text_contains "기준", waits for "km" to reappear)
+- [x] const/options/strings: widget_refresh_enabled (default off)
+- [x] Coordinator: settled glow snapshot -> refresh -> fresh
+      re-scrape; silent skip while a sequence runs
+- [x] Tests green on the board venv; ruff clean — 57 passed
+- [x] Deploy, set live options (3 min + refresh on), verify
+      data_updated_at advances on its own
+- [x] Update guide; record results below
+
+### Results (2026-09-02)
+
+- widget_refresh sequence added (wake/home/wait-launcher/tap 기준/
+  sleep/wait-km). widget_refresh_enabled option (default off) with
+  a "may query the vehicle" warning in both languages. The empty
+  EntitySelector for battery_sensor had to drop its "" default —
+  an empty entity id fails validation on options submit; fixed.
+- MAJOR live finding: the blue car aura is NOT a climate-only
+  indicator — it marks ACTIVE REMOTE COMMUNICATION and clears ~30 s
+  after it settles (measured 0.0151 right after a refresh tap, 0.0
+  at t+30 s). So tapping refresh then screenshotting immediately
+  false-positived climate_running. Fix: judge glow from the
+  SETTLED snapshot taken BEFORE the refresh tap; read fresh data
+  from a second snapshot AFTER the refresh. Also added an
+  incomplete-scrape guard (battery/range hidden mid-refresh keeps
+  the previous values).
+- Live verified with vehicle_poll_minutes=3 + widget_refresh on:
+  data_updated_at tracked ~1 min behind real time (e.g. 9:53 data
+  read at 9:54 — refresh working), range moved 367→365→374 across
+  refreshes, climate_running=off / glow 0.0 (false-positive gone).
+- 57/57 tests on the board venv; ruff clean. GitHub issue #36,
+  branch feature/myhyundai-widget-refresh. NOTE: climate_running
+  now reflects the pre-refresh settled state; its reliability
+  across a full 10-min climate session is only partially
+  characterized (glow seen sustained ~83 s post aircon-on in the
+  PR#35 experiment) — documented as best-effort with the
+  glow_fraction attribute exposed for tuning.

@@ -37,7 +37,8 @@
           "retry_gap_sec": "Gap between retries (s)",
           "screen_check_enabled": "Check screen resolution before runs",
           "dump_on_failure": "Save a UI dump on failure",
-          "vehicle_poll_minutes": "Vehicle data poll interval (min, 0 = off)"
+          "vehicle_poll_minutes": "Vehicle data poll interval (min, 0 = off)",
+          "widget_refresh_enabled": "Tap the widget refresh control before each poll (may query the vehicle)"
         }
       }
     }

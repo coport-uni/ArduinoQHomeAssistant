@@ -35,6 +35,39 @@
         }
       ]
     },
+    "widget_refresh": {
+      "description": "위젯의 기준시각/새로고침 영역 탭 — 최신 차량 데이터 강제 갱신. 명령이 아닌 데이터 조회이며, 차량 텔레매틱스 조회가 발생할 수 있음(사용자 승인됨).",
+      "steps": [
+        { "action": "wake" },
+        { "action": "home" },
+        { "action": "wait_focus", "pattern": "Launcher", "timeout": 5 },
+        {
+          "action": "wait_node",
+          "match": {
+            "text_contains": "기준",
+            "package": "com.hyundai.oneapp.kr"
+          },
+          "timeout": 5
+        },
+        {
+          "action": "tap_node",
+          "match": {
+            "text_contains": "기준",
+            "package": "com.hyundai.oneapp.kr"
+          },
+          "timeout": 5
+        },
+        { "action": "sleep", "seconds": 2 },
+        {
+          "action": "wait_node",
+          "match": {
+            "text_contains": "km",
+            "package": "com.hyundai.oneapp.kr"
+          },
+          "timeout": 25
+        }
+      ]
+    },
     "aircon_off": {
       "description": "홈 화면 위젯의 공조 끄기 버튼 탭(U7: 위젯에 끄기 버튼 존재 확인됨). 성공 알림 '공조가 꺼졌습니다.' 실측 확정.",
       "steps": [
