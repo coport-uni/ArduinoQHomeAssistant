@@ -1553,3 +1553,47 @@ automations no matter what the UI writes.
 - Ruff clean on both new scripts. No unit tests added: the change is
   declarative YAML plus two one-off installer/diagnostic scripts, and
   the behaviour was verified against the hardware instead.
+
+
+## 2026-09-02 — Third colour: red when off both known networks
+
+Requested by user ("TP-Link_0624를 녹색으로 하고 이 2개의 wifi가
+아님 빨강이도록 자동화 스크립트를 구성해줘"). The indicator gains a
+third state, so it now distinguishes "which known network" from "no
+known network" instead of only "dorm or not":
+
+- `XiaomiDorm55` -> blue (unchanged)
+- `TP-Link_0624` -> green (was the catch-all colour)
+- anything else, including no WiFi at all -> red (new)
+
+Continues issue #44 on the same branch rather than opening a new one:
+PR #45 is still open and this edits the very file it introduces, so a
+separate stacked PR would only fragment the review.
+
+- [x] Add the TP-Link_0624 branch and repoint the default to red
+- [x] Reinstall on the board and verify all three colours on camera
+- [x] Update the guide, README and PR/issue text
+- [x] Record results below
+
+### Results (2026-09-02)
+
+- The `choose` gained a second branch (`TP-Link_0624` -> green) and
+  the `default:` became red, so "no known network" now reads
+  differently from "the other known network". Adding a third network
+  later is one more branch and no change to the default.
+- Verified on the board through the webcam, forcing the SSID over the
+  REST API:
+  - `XiaomiDorm55` -> `(0, 0, 255)`, blue on camera.
+  - `TP-Link_0624` -> `(0, 255, 0)`, green on camera.
+  - `<not connected>` -> `(255, 0, 0)`, red on camera.
+  - `OtherCafeWiFi` (an SSID the automation has never seen) ->
+    `(255, 0, 0)`, confirming the default branch is not just the
+    disconnected case.
+- Worth remembering: `automation.reload` installs the new config but
+  does NOT re-run it, so LED4 kept the colour the previous version
+  had set. It looked correct here only because the phone was on
+  TP-Link_0624, which is green under both versions -- the three
+  colours had to be forced individually to actually prove anything.
+- Committed onto the existing branch and PR #45 rather than opening
+  a second stacked PR; issue #44 and the PR body were updated to the
+  three-colour behaviour.

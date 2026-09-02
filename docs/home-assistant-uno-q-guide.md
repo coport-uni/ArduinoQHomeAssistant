@@ -591,10 +591,20 @@ The installer re-reads the entity list after reloading and fails
 loudly if the automation did not turn up, which is exactly what a
 missing include looks like.
 
-The automation itself is blue on `XiaomiDorm55` and green on anything
-else -- including `<not connected>`, `unavailable`, and `unknown`,
-since being away from that network usually means no WiFi at all
-rather than a different SSID.
+The automation itself colours LED4 by SSID:
+
+| SSID | LED4 |
+|---|---|
+| `XiaomiDorm55` | blue |
+| `TP-Link_0624` | green |
+| anything else | red |
+
+Red is the `default:` branch of the `choose`, so it also covers
+`<not connected>`, `unavailable`, and `unknown` -- being away from
+both known networks usually means no WiFi at all rather than a third
+SSID, and "no known network" is exactly what the indicator should
+show then. Adding a network is one more `choose` branch; the default
+needs no touching.
 
 It has three triggers, and the third is the non-obvious one:
 
