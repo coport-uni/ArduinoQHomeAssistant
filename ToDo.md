@@ -1271,3 +1271,32 @@ force-refresh) into README.md and merge to main.
   freshness); gotchas gained the UTC-timezone trap and the
   "a visual marker may mean something broader than it looks"
   lesson from the aura finding.
+
+## 2026-09-02 — Restart Home Assistant (operational request)
+
+Requested by user ("홈 어시스턴트 서버를 재시작해줘"). Operational
+task, no repo code involved.
+
+- [x] Restart home-assistant.service and confirm it comes back
+- [x] Verify health after the restart
+- [x] Record results below
+
+### Results (2026-09-02)
+
+- `systemctl restart home-assistant`: back with HTTP 200 in ~20 s,
+  service active (running), ExecMainStart 01:17:39 UTC, frontend
+  200. No integration errors in the post-restart log; the only
+  warnings are this board's usual ones (no ffmpeg binary,
+  Bluetooth NET_ADMIN/NET_RAW permissions, libturbojpeg missing) —
+  none related to our components.
+- FINDING: the stored long-lived token in /home/arduino/.ha_token
+  no longer authenticates (401 on REST, auth_invalid on the
+  websocket) and the previously set password `arduino` no longer
+  logs in. The auth stores were rewritten at 01:15/01:16, i.e.
+  BEFORE this restart (01:17) — so the credentials were changed
+  outside this session, most likely the user changing the password
+  in the web UI as previously recommended. Deliberately did NOT
+  reset the password again (that would clobber the user's own
+  choice); health was verified from logs and systemd instead.
+  Next API-driven work needs either the new password (to mint a
+  token) or a token created in the UI.
