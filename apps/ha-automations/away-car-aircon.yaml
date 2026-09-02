@@ -1,0 +1,55 @@
+# Start the car's aircon once the phone has left every known network.
+#
+# The phone's SSID stands in for "where the user is". Sitting on none
+# of the known networks for a sustained stretch means actually
+# travelling, which is when it is worth cooling the car down.
+#
+# Known networks are listed once in the trigger below and must stay in
+# sync with apps/ha-automations/phone-wifi-led4.yaml, which colours
+# LED4 from the same sensor. YAML has no constants, so the list is
+# duplicated on purpose rather than hidden behind a helper entity.
+#
+# Two exclusions in that list are not networks at all. `unavailable`
+# and `unknown` mean the companion app stopped reporting -- phone off,
+# app killed, Home Assistant restarting -- not that the phone went
+# anywhere, and a car must never start because Home Assistant lost
+# contact with a phone.
+#
+# The two-minute hold is not padding: the phone drops to
+# "<not connected>" and reconnects within seconds while roaming
+# between access points, and each of those blips would otherwise start
+# the car.
+#
+# Install with claude_test/ha_add_automation.py.
+alias: Car aircon when the phone leaves all known WiFi
+description: >-
+  Turns the vehicle aircon on once the phone has been off every known
+  network for two minutes, so the cabin is cooling before the user
+  arrives.
+mode: single
+
+triggers:
+  - trigger: template
+    value_template: >-
+      {{ states('sensor.sm_f966n_wi_fi_connection') not in
+         ['XiaomiDorm55', 'TP-Link_0624', 'WUNIST_AAA',
+          'unavailable', 'unknown'] }}
+    for: "00:02:00"
+
+conditions:
+  # A re-trigger inside the component's 10-minute auto-off window
+  # would only be rejected by its cooldown guard; skip it cleanly
+  # instead of logging a failure.
+  - condition: state
+    entity_id: switch.myhyundai_aircon
+    state: "off"
+
+actions:
+  # The switch carries its own guards -- a 40 % vehicle battery floor,
+  # a 10-minute auto-off and a 60-second cooldown -- so there is
+  # deliberately nothing else wrapped around this call. A failure
+  # (phone unreachable, battery too low) lands in
+  # sensor.myhyundai_last_error rather than being swallowed here.
+  - action: switch.turn_on
+    target:
+      entity_id: switch.myhyundai_aircon
