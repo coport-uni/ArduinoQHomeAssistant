@@ -2,15 +2,47 @@
   "version": 1,
   "baseline_screen": "AUTO",
   "package": "com.hyundai.oneapp.kr",
-  "login_markers": ["LOGIN_MARKER_PLACEHOLDER"],
+  "login_markers": [
+    "LOGIN_MARKER_PLACEHOLDER"
+  ],
   "sequences": {
     "aircon_on": {
       "description": "홈 화면 위젯의 공조 켜기 버튼 탭. 노드 식별자와 알림 문구는 2026-09-01 실기기 관찰로 확정(확인 팝업 없음, 성공 알림 '공조가 켜졌습니다.'). 실패 문구(U6)는 아직 미관찰이라 비워 둠 — 실패 시 E_TIMEOUT으로 판정된다.",
       "steps": [
-        { "action": "assert_screen" },
-        { "action": "wake" },
-        { "action": "home" },
-        { "action": "wait_focus", "pattern": "Launcher", "timeout": 5 },
+        {
+          "action": "assert_screen"
+        },
+        {
+          "action": "wake"
+        },
+        {
+          "action": "launch_app",
+          "package": "com.hyundai.oneapp.kr",
+          "optional": true
+        },
+        {
+          "action": "sleep",
+          "seconds": 8
+        },
+        {
+          "action": "home"
+        },
+        {
+          "action": "wait_focus",
+          "pattern": "Launcher",
+          "timeout": 5,
+          "optional": true
+        },
+        {
+          "action": "tap_ratio",
+          "x": 0.5,
+          "y": 0.52,
+          "optional": true
+        },
+        {
+          "action": "sleep",
+          "seconds": 1
+        },
         {
           "action": "wait_node",
           "match": {
@@ -29,7 +61,9 @@
         },
         {
           "action": "await_notification",
-          "success_contains": ["공조가 켜졌습니다"],
+          "success_contains": [
+            "공조가 켜졌습니다"
+          ],
           "failure_contains": [],
           "timeout": 60
         }
@@ -38,9 +72,37 @@
     "widget_refresh": {
       "description": "위젯의 기준시각/새로고침 영역 탭 — 최신 차량 데이터 강제 갱신. 명령이 아닌 데이터 조회이며, 차량 텔레매틱스 조회가 발생할 수 있음(사용자 승인됨).",
       "steps": [
-        { "action": "wake" },
-        { "action": "home" },
-        { "action": "wait_focus", "pattern": "Launcher", "timeout": 5 },
+        {
+          "action": "wake"
+        },
+        {
+          "action": "launch_app",
+          "package": "com.hyundai.oneapp.kr",
+          "optional": true
+        },
+        {
+          "action": "sleep",
+          "seconds": 8
+        },
+        {
+          "action": "home"
+        },
+        {
+          "action": "wait_focus",
+          "pattern": "Launcher",
+          "timeout": 5,
+          "optional": true
+        },
+        {
+          "action": "tap_ratio",
+          "x": 0.5,
+          "y": 0.52,
+          "optional": true
+        },
+        {
+          "action": "sleep",
+          "seconds": 1
+        },
         {
           "action": "wait_node",
           "match": {
@@ -57,7 +119,10 @@
           },
           "timeout": 5
         },
-        { "action": "sleep", "seconds": 2 },
+        {
+          "action": "sleep",
+          "seconds": 2
+        },
         {
           "action": "wait_node",
           "match": {
@@ -71,10 +136,40 @@
     "aircon_off": {
       "description": "홈 화면 위젯의 공조 끄기 버튼 탭(U7: 위젯에 끄기 버튼 존재 확인됨). 성공 알림 '공조가 꺼졌습니다.' 실측 확정.",
       "steps": [
-        { "action": "assert_screen" },
-        { "action": "wake" },
-        { "action": "home" },
-        { "action": "wait_focus", "pattern": "Launcher", "timeout": 5 },
+        {
+          "action": "assert_screen"
+        },
+        {
+          "action": "wake"
+        },
+        {
+          "action": "launch_app",
+          "package": "com.hyundai.oneapp.kr",
+          "optional": true
+        },
+        {
+          "action": "sleep",
+          "seconds": 8
+        },
+        {
+          "action": "home"
+        },
+        {
+          "action": "wait_focus",
+          "pattern": "Launcher",
+          "timeout": 5,
+          "optional": true
+        },
+        {
+          "action": "tap_ratio",
+          "x": 0.5,
+          "y": 0.52,
+          "optional": true
+        },
+        {
+          "action": "sleep",
+          "seconds": 1
+        },
         {
           "action": "wait_node",
           "match": {
@@ -93,7 +188,9 @@
         },
         {
           "action": "await_notification",
-          "success_contains": ["공조가 꺼졌습니다"],
+          "success_contains": [
+            "공조가 꺼졌습니다"
+          ],
           "failure_contains": [],
           "timeout": 60
         }

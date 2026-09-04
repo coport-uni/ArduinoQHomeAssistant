@@ -1,0 +1,33 @@
+# Probe automation: same trigger as apps/ha-automations/away-car-aircon.yaml,
+# but it writes a log line instead of commanding the car.
+#
+# Point of it: the real automation's action starts a real vehicle, so the
+# trigger and its two-minute hold cannot be exercised by just firing it and
+# watching. Install this first, drive the SSID sensor through the REST API,
+# and grep home-assistant.log to see exactly when (and whether) it fired.
+#
+# Keep the value_template identical to the real automation, or the probe
+# proves nothing about it.
+#
+# Install:  ha_add_automation.py --config away_trigger_probe.yaml --id away_trigger_probe
+# Remove:   DELETE /api/config/automation/config/away_trigger_probe, then reload
+alias: PROBE away trigger
+mode: single
+
+triggers:
+  - trigger: template
+    value_template: >-
+      {{ states('sensor.sm_f966n_wi_fi_connection') not in
+         ['XiaomiDorm55', 'TP-Link_0624', 'WUNIST_AAA',
+          'unavailable', 'unknown'] }}
+    for: "00:02:00"
+
+conditions: []
+
+actions:
+  - action: system_log.write
+    data:
+      level: warning
+      logger: away_trigger_probe
+      message: >-
+        PROBE FIRED, ssid={{ states('sensor.sm_f966n_wi_fi_connection') }}

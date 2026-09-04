@@ -1,0 +1,51 @@
+# Push a notification when a vehicle command or poll fails.
+#
+# Every failure mode this component has is silent: the switch falls
+# back to off, `sensor.myhyundai_last_error` records a code, and
+# nothing else happens. That was survivable while commands were typed
+# by hand, but away-car-aircon.yaml now fires them while the user is
+# out -- exactly when nobody is watching an error sensor. Eight
+# consecutive failures went unnoticed over 2026-09-02..03 for that
+# reason (issue #49).
+#
+# The trigger is a state change TO failure, not the failure state
+# itself, so a run of failures notifies once rather than every poll.
+#
+# Install with claude_test/ha_add_automation.py.
+alias: MyHyundai command failed
+description: >-
+  Notifies the phone when sensor.myhyundai_last_result turns failure,
+  so a silently broken vehicle command path cannot go unnoticed.
+mode: single
+
+triggers:
+  - trigger: state
+    entity_id: sensor.myhyundai_last_result
+    to: failure
+
+conditions: []
+
+actions:
+  # Push first: the whole point is reaching the user away from home.
+  - action: notify.mobile_app_sm_f966n
+    data:
+      title: 차량 명령 실패
+      message: >-
+        {{ states('sensor.myhyundai_last_error') }} —
+        마지막 알림: {{ states('sensor.myhyundai_last_notification') }}
+      data:
+        # Survives being missed: stays in the shade until dismissed.
+        ttl: 0
+        priority: high
+  # And a copy inside Home Assistant, which is where the details get
+  # looked up afterwards.
+  - action: persistent_notification.create
+    data:
+      title: MyHyundai command failed
+      notification_id: myhyundai_failure
+      message: >-
+        `sensor.myhyundai_last_error` = {{
+        states('sensor.myhyundai_last_error') }} at {{
+        now().strftime('%Y-%m-%d %H:%M:%S') }}. Check
+        home-assistant.log and the newest dump in
+        config/myhyundai_aircon_dumps/.

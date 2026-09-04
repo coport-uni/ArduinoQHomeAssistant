@@ -1597,3 +1597,251 @@ separate stacked PR would only fragment the review.
 - Committed onto the existing branch and PR #45 rather than opening
   a second stacked PR; issue #44 and the PR body were updated to the
   three-colour behaviour.
+
+
+## 2026-09-02 — Start the car aircon when the phone leaves every
+## known WiFi
+
+Requested by user ("핸드폰이 해당 와이파이에서 끊어질때 자동차의
+공조 장치를 활성화하는거야"), building on the LED4 indicator. Turns
+`switch.myhyundai_aircon` on when the phone's SSID has been outside
+every known network for a sustained period.
+
+Three things were settled before writing anything:
+
+- **Which networks count as "known"**: the user first said "either of
+  the two", but the phone spends most of its day on `WUNIST_AAA` (the
+  lab) -- under that rule the car would start every time the user
+  arrives at the lab. Shown the evidence, the user added `WUNIST_AAA`
+  to the known list, so the trigger now means "at none of the three
+  places I normally am".
+- **Debounce: 2 minutes.** Recorder history justifies it -- at
+  12:27:31 the phone dropped to `<not connected>` and was back on
+  `TP-Link_0624` four seconds later, entirely on its own.
+- **`unavailable`/`unknown` must NOT fire.** Those mean the companion
+  app stopped reporting (phone off, app killed, HA restarting), not
+  that the phone went anywhere. Starting a car because HA lost contact
+  with a phone is the one failure mode worth engineering out.
+
+Checked and cleared: the aircon is driven over ADB from a *dedicated*
+Galaxy Z Fold3 (SM-F926N) that lives on the board's USB hub, not from
+the phone reporting the SSID (SM-F966N), so the command path does not
+leave with the user.
+
+- [x] Merge the LED stack (#41, #43/#46, #45) into main first
+- [x] Automation YAML under `apps/ha-automations/`
+- [x] Prove the trigger and the 2-minute debounce with a probe
+      automation that does NOT command the car
+- [x] Install the real automation
+- [x] Update the guide, README and claude_test index
+- [x] Record results below
+
+### Results (2026-09-02)
+
+- Merged the LED stack into main first, and it did not go cleanly:
+  #41 was squashed without deleting its head branch, so GitHub never
+  retargeted #43 and it merged into `feature/unoq-led-mqtt-lights`
+  instead of `main`. Reopened the same commits as #46 against `main`,
+  resolved the ToDo/guide/README/LearnedPatterns conflicts (every one
+  of them a pure addition on our side, main's side empty), and merged
+  #46 then #45. main now carries all three: a4f0ebf, 64f6138, 228b972.
+  Lesson: with a squash-merge stack, delete the head branch as part of
+  the merge or the PR above it lands on a branch instead of main.
+- The trigger and its hold were proved WITHOUT commanding the car, by
+  installing `claude_test/away_trigger_probe.yaml` -- identical
+  `value_template` and `for:`, but `system_log.write` as the action:
+  - 30-second absence, then back to a known network: did not fire,
+    `last_triggered` still `None`.
+  - sustained absence: fired at 13:00:18 having started at 12:58:18,
+    exactly 120 s, and not at the 60/90/115 s checkpoints.
+  Probe deleted afterwards; only the two real automations are loaded.
+- Truth table evaluated by HA's own template engine rather than by
+  reading the YAML: `XiaomiDorm55`, `TP-Link_0624`, `WUNIST_AAA`,
+  `unavailable` and `unknown` -> no trigger; `<not connected>` and
+  `CafeWiFi` -> trigger.
+- Car-side preconditions confirmed healthy before handover:
+  `binary_sensor.myhyundai_device_connected` on,
+  `sensor.myhyundai_vehicle_battery` 83 % (floor is 40 %),
+  `switch.myhyundai_aircon` off, `sensor.myhyundai_last_error` none.
+- NOT done, deliberately: no live end-to-end run. Everything up to the
+  service call is verified, but actually starting the user's car is
+  their call to make, so it was left as an explicit offer rather than
+  done unprompted.
+- Known limitation, documented in guide §9h: the SSID only reaches HA
+  while the phone has some connectivity. A phone that loses WiFi and
+  LTE together stops pushing and the sensor goes stale, so this is an
+  indicator of a reported network, not a presence detector.
+- The known-network list is duplicated between the two automation
+  files. YAML has no constants and a helper entity buys less than it
+  costs, but the files must be edited together -- noted in both.
+
+
+## 2026-09-02 — Give WUNIST_AAA the same LED colour as TP-Link_0624
+
+Requested by user ("에도 tp link랑 같은 색을 할당하자"), closing the
+mismatch flagged when the aircon automation shipped: the LED knew two
+networks while the aircon automation knew three, so sitting at the lab
+showed red even though the car was not being armed.
+
+- [x] Add `WUNIST_AAA` to the green branch (a `condition: state`
+      matches any value in a list, so it is one branch, not two)
+- [x] Reinstall and walk all four states on hardware
+- [x] Update the guide table, the duplication note and the README
+
+### Results (2026-09-02)
+
+- All four states walked on the board and confirmed on camera:
+  `XiaomiDorm55` -> `(0, 0, 255)`, `TP-Link_0624` -> `(0, 255, 0)`,
+  `WUNIST_AAA` -> `(0, 255, 0)`, `CafeWiFi` -> `(255, 0, 0)`, then
+  back to the real `WUNIST_AAA` -> green.
+- The `CafeWiFi` step armed the aircon automation's two-minute
+  countdown; switching back within seconds cancelled it, and
+  `switch.myhyundai_aircon` is still off with `last_triggered` None --
+  an unplanned but welcome second demonstration of the debounce.
+- Red now lights exactly for the set that arms the car, so the LED is
+  a visible check that the two automations' network lists still agree.
+  Both files carry a comment saying they must be edited together.
+- Committed onto feature/away-car-aircon and PR #48 rather than a new
+  branch: that PR is what introduced the three-network list, so the
+  LED catching up belongs with it.
+
+
+## 2026-09-02 — Add the two ASUS dorm SSIDs to the blue branch
+
+Requested by user ("그리고 ASUS_55랑 ASUS_55_24 와이파이도 파랑에
+추가해줘"). The dorm publishes three SSIDs, not one -- the ASUS pair
+is a single router's 5 GHz and 2.4 GHz radios -- and the phone roams
+between them on its own.
+
+- [x] Add both to the LED's blue branch
+- [x] Add both to the aircon automation's known-network list as well,
+      which was not asked for but is required: leaving them out would
+      have armed the car while the LED showed blue, breaking the
+      invariant established one task earlier that red lights exactly
+      when the car is counting down
+- [x] Reinstall both automations and walk every SSID on hardware
+- [x] Update the guide table, the §9h snippet and the README
+
+### Results (2026-09-02)
+
+- LED4 walked across all six SSIDs on the board: `XiaomiDorm55`,
+  `ASUS_55` and `ASUS_55_24` -> blue; `TP-Link_0624` and
+  `WUNIST_AAA` -> green; `CafeWiFi` -> red; back to the real
+  `WUNIST_AAA` -> green.
+- Aircon truth table re-evaluated by HA's template engine and it
+  agrees on every one of them: only `<not connected>` and `CafeWiFi`
+  arm the car. `unavailable` and `unknown` still do not.
+- Deliberate near-miss in that run: `ASUS_5` reads as an unknown
+  network, confirming the test is exact-string membership rather than
+  a prefix match. Worth knowing before someone adds an SSID by
+  shortening another.
+- `switch.myhyundai_aircon` still off throughout; no live vehicle
+  command has been issued at any point.
+
+
+## 2026-09-02 — Correct the "red == aircon trigger" claim
+
+Prompted by the user asking whether going blue-or-green to red is
+what turns the aircon on. Nearly, but the earlier entries above
+overstate it, so the claim is corrected here rather than edited there
+(ToDo.md is append-only).
+
+Red is WIDER than the aircon trigger. Both read the same
+known-network list, but LED4's red is the `default:` branch of a
+`choose`, so `unavailable` and `unknown` land in it -- and those two
+are explicitly excluded from the aircon trigger. Verified on hardware:
+setting the sensor to `unavailable` and to `unknown` both drove LED4
+to `(255, 0, 0)` while the aircon template stayed False for both.
+
+So: every aircon countdown happens under a red LED, but not every red
+LED is a countdown. Three further gates sit between red and a running
+aircon -- the two-minute hold, the `switch.myhyundai_aircon` is `off`
+condition, and the component's own guards (40 % vehicle battery floor,
+cooldown, reachable phone).
+
+- [x] Verify the `unavailable`/`unknown` divergence on hardware
+- [x] Correct the wording in the LED YAML header, guide §9g/§9h, the
+      README results row and the PR #48 body
+
+
+## 2026-09-04 — Live aircon run, and the three faults it exposed
+
+Requested by user ("지금 공조장치를 활성화해줘"), then ("두가지 모두
+진행해줘") for both remediations. GitHub issue #49.
+
+The first live `switch.myhyundai_aircon` turn-on failed. The log
+showed it was not new: EVERY attempt from 2026-09-02 23:10 to
+2026-09-03 23:05 had failed the same way -- eight of them -- and
+vehicle data had been frozen since 2026-09-03 23:03. The automation
+built the day before was live but inert.
+
+- [x] Diagnose the failure rather than retrying it
+- [x] Get the aircon actually running
+- [x] Recipe-level self-healing so a dead widget host recovers itself
+- [x] Failure notification so a silent break cannot repeat
+- [x] Document all of it
+
+### Results (2026-09-04)
+
+Three independent faults, all invisible from Home Assistant:
+
+1. The MyHyundai app process was dead, so the home-screen widget
+   rendered as a blank grey box and the `공조 켜기` node did not
+   exist. Launching the app repainted it.
+2. A Samsung Circle-to-Search tip (`SearcleTip`) held window focus,
+   and `uiautomator dump` only covers the focused window -- it
+   returned 1932 bytes of `com.android.systemui` and nothing else.
+   `KEYCODE_BACK` did not clear it; a tap on empty wallpaper did, and
+   the dump grew to 38822 bytes.
+3. App 1.6.0 (updated 2026-09-03 13:15, from the 1.5.1 that HA had
+   recorded) refuses to run while USB debugging is on and shows a
+   modal `USBDEBUG` dialog -- while the whole component drives the
+   phone over ADB, which requires `adb_enabled=1`.
+
+Fault 3 sounds fatal and is not: the widget repaints behind the
+dialog and one HOME clears it off screen. Measured directly --
+4464 bytes with `USBDEBUG` present and `공조 켜기` absent, then
+38876 bytes with `공조 켜기` present after a single `KEYCODE_HOME`.
+The command path taps the widget, never the app.
+
+With all three cleared by hand the aircon ran: `last_result=success`,
+vehicle notification `공조가 켜졌습니다.`,
+`binary_sensor.myhyundai_climate_running=on`, battery 85 %.
+
+Both remediations shipped:
+
+- **Self-healing recipe.** Every sequence now opens with wake ->
+  launch_app -> sleep 8 -> home -> wait_focus -> tap_ratio(0.5, 0.52)
+  -> sleep 1, with every recovery step marked `optional` so a healthy
+  phone is never broken by them. Validated against the component's own
+  `_RECIPE_SCHEMA` before install. The prefix costs up to ~16 s, which
+  pushed the worst case past the 90 s `sequence_timeout_sec`, so that
+  option was raised to 120 through the options flow (REST, not
+  WebSocket -- `config_entries/options/flow` is not a WS command).
+- **Failure alert.** `apps/ha-automations/myhyundai-failure-alert.yaml`
+  pushes to the phone and creates a persistent notification when
+  `sensor.myhyundai_last_result` turns `failure`. Triggered on the
+  transition, not the state, so a run of failures notifies once.
+  Tested by forcing success -> failure: automation fired at 00:12:10
+  and the notify service raised nothing.
+
+An earlier draft of the recipe also tapped a `확인` node to dismiss
+the dialog. It was removed: HOME alone clears it, measured, and a step
+that never does anything is not worth 4 s on every command.
+
+NOT done:
+
+- No second live vehicle command. The `aircon_off` run that would have
+  proved the self-healing prefix on a real command path was blocked by
+  the environment's approval policy, so the prefix is verified at the
+  adb level (force-stop -> launch -> home -> `공조 켜기` visible) but
+  not yet through a full sequence.
+- `widget_refresh` is still broken by fault 3 and the prefix does not
+  fix it: it taps the widget's refresh control, which brings the app
+  forward and lets the dialog cover the screen. It is disabled in the
+  options, so nothing depends on it.
+
+Worth recording about the switch itself: `_auto_off` only calls
+`_reset_to_off()`. It sends NO off command -- it mirrors the vehicle's
+own ~10-minute remote-climate limit in the entity state.
+

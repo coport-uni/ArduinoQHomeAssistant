@@ -163,6 +163,9 @@ Two consequences that surprise R4 users most:
 | Tapo registration repeated on the venv-HA rig (192.168.31.x) | Both plugs (DormTapo1/2) registered with credential pre-check; 32 entities incl. power sensors; toggle 6/6 with initial state restored |
 | Graphite theme on the venv HA | 3 theme variants loaded from `ha_config/themes/`, "Graphite Auto" confirmed as backend default via the WebSocket API |
 | LED4 as a phone-WiFi indicator | Confirmed through a webcam pointed at the board: `XiaomiDorm55` → blue, `TP-Link_0624` → green, `<not connected>` and an unknown SSID → red, and a full App Lab bridge restart → colour re-applied from the availability trigger |
+| LED4 red covers the aircon trigger | Every SSID walked on hardware: the three dorm SSIDs → blue, `TP-Link_0624` and `WUNIST_AAA` → green, `CafeWiFi` → red. `unavailable` and `unknown` also show red but do not start the car, so every countdown runs under a red LED while not every red LED is a countdown. The aircon truth table agrees on all of them, and the near-miss `ASUS_5` correctly reads as unknown — matching is exact-string, not prefix |
+| Live vehicle command, end to end | `switch.myhyundai_aircon` turned the real car's aircon on: `last_result=success`, vehicle notification `공조가 켜졌습니다.`, `binary_sensor.myhyundai_climate_running=on`. The first attempt failed and exposed three separate widget-availability faults (issue #49), all now self-healed by the recipe |
+| Car aircon on leaving every known WiFi | Trigger and debounce proved with a probe automation that logs instead of commanding the car: a 30 s blip did not fire, a sustained absence fired at T+120 s exactly (12:58:18 → 13:00:18). Truth table evaluated by HA's own template engine: the three known SSIDs, `unavailable` and `unknown` → no; `<not connected>` and an unseen SSID → yes |
 
 ## Repository layout
 
@@ -177,7 +180,9 @@ Two consequences that surprise R4 users most:
 | `apps/ha-mcu-bridge/` | App Lab app: MCU sketch (LED + pin RPC) + Python MQTT bridge with HA Discovery; `python/led_color.py` holds the colour/brightness maths |
 | `apps/mosquitto/mosquitto.conf` | MQTT broker config (host-local listeners, nothing on the LAN) |
 | `apps/ha-dashboard/unoq-leds.yaml` | Dashboard putting the LED colour/brightness controls on the surface, installed with `claude_test/ha_add_dashboard.py` |
-| `apps/ha-automations/phone-wifi-led4.yaml` | Automation turning LED4 into a phone-WiFi indicator (blue on `XiaomiDorm55`, green on `TP-Link_0624`, red on any other network or none), installed with `claude_test/ha_add_automation.py` |
+| `apps/ha-automations/phone-wifi-led4.yaml` | Automation turning LED4 into a phone-WiFi indicator (blue on any of the three dorm SSIDs, green on `TP-Link_0624` or `WUNIST_AAA`, red on any other network or none), installed with `claude_test/ha_add_automation.py` |
+| `apps/ha-automations/away-car-aircon.yaml` | Automation starting the vehicle aircon once the phone has been off every known WiFi for two minutes |
+| `apps/ha-automations/myhyundai-failure-alert.yaml` | Automation pushing a notification when `sensor.myhyundai_last_result` turns `failure`, so a silently broken vehicle command path cannot go unnoticed |
 | `claude_test/` | Working diagnostic scripts (subnet Tapo probe, HA onboarding/auth/registration, toggle tester) — each documented in its README |
 | `external/CommonClaude` | Shared engineering conventions (git submodule) |
 | `CLAUDE.md`, `ToDo.md`, `LearnedPatterns.md` | Project conventions, cumulative task log, and lessons learned |
