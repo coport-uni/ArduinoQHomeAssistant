@@ -245,3 +245,26 @@ detection, #2 reproducibility guide, #3 WiFi + VS Code Remote-SSH,
 ## §99. Uncategorized
 
 - (empty)
+
+- **Problem**: Verifying a new automation by writing test values into a
+  presence sensor started the car. **Cause**: The test was checked
+  against one other automation's "known networks" list and
+  `<not connected>` is not in it -- that list is an exclusion set, so
+  every value absent from it is a trigger, and a state chosen as
+  "obviously safe" was the most dangerous one available. **Fix**: Pick
+  test values by evaluating every live automation's trigger against
+  the candidate, not by avoiding one list; end every such test on a
+  value that is inert for all of them. **Rule**: Always enumerate the
+  automations currently loaded on the board and evaluate each one's
+  trigger before writing a value into a shared sensor -- an exclusion
+  list makes unlisted values active, not safe. (from ToDo#50)
+- **Problem**: Entity ids recorded in `ToDo.md` had silently stopped
+  existing. **Cause**: The Tapo plugs were renamed in the Tapo app
+  after registration, and HA regenerates the entity id from the device
+  name; `switch.tapo_p1` / `switch.tapo_p2` became
+  `switch.dormtapo1` / `switch.dormtapo2`. **Fix**: Resolve entity ids
+  from `/api/states` on the live board at the start of any task that
+  targets a device, rather than from repo history. **Rule**: Never
+  take a Tapo entity id from documentation; read it back from HA,
+  because renaming a device in the vendor app rewrites it. (from
+  ToDo#50)

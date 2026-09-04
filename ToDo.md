@@ -1597,3 +1597,84 @@ separate stacked PR would only fragment the review.
 - Committed onto the existing branch and PR #45 rather than opening
   a second stacked PR; issue #44 and the PR body were updated to the
   three-colour behaviour.
+
+## 2026-09-04 — Monitor plug follows the phone onto the dorm WiFi
+
+Requested by user: the monitor's smart plug should be on only while
+the phone is connected to `XiaomiDorm55`. User decisions taken up
+front: dorm membership is `XiaomiDorm55` alone (not the three-SSID
+set that phone-wifi-led4.yaml treats as "the dorm"), turning on is
+immediate, and leaving the network turns the plug off after a hold.
+GitHub issue #50. (see LP §2)
+
+Input validation, before writing this entry:
+
+- Plug identity resolved against the live board, not the repo. The
+  2026-07-13 entries name `switch.tapo_p1` / `switch.tapo_p2`; both
+  have since been renamed in the Tapo app, and HA now exposes
+  `switch.dormtapo1` = "기숙사-모니터" (the monitor, the target here)
+  and `switch.dormtapo2` = "기숙사-충전기".
+- Recorder checked for 7 days of `sensor.sm_f966n_wi_fi_connection`
+  before choosing the SSID set and the hold, per LP §2: XiaomiDorm55
+  holds 18.79 h, ASUS_55 and ASUS_55_24 hold 0.00 h each (one
+  momentary sample apiece, 2026-09-02 13:42). The phone does not in
+  fact roam between the dorm's three SSIDs, so "XiaomiDorm55 only" is
+  not the trap it looked like. One real excursion lasted 0.1 min
+  (6 s) and returned, which is what the hold has to absorb.
+
+- [x] Write `apps/ha-automations/dorm-monitor-plug.yaml`: turn
+      `switch.dormtapo1` on when the SSID becomes `XiaomiDorm55`, and
+      off once it has been anything else for two minutes
+- [x] Keep `unavailable` / `unknown` out of the off path -- losing
+      contact with the phone must never cut power to a monitor the
+      user may be sitting in front of (LP §2)
+- [x] Install on the board with `claude_test/ha_add_automation.py`
+      and confirm it loaded as an `automation.*` entity (LP §2)
+- [x] Verify both directions live against the real plug, with the
+      monitor's original state restored afterwards
+- [x] Document the SSID / plug mapping so the stale `switch.tapo_p1`
+      naming is not repeated
+
+### Results (2026-09-04)
+
+Installed as `automation.monitor_plug_on_the_dorm_wifi`. Verified by
+driving `sensor.sm_f966n_wi_fi_connection` through the states API,
+which raises a real `state_changed` event, so the automation fired for
+real rather than through `automation.trigger`:
+
+| Case | Result |
+|---|---|
+| SSID -> `XiaomiDorm55` | plug on after 2.1 s |
+| SSID -> `WUNIST_AAA`, at t+60 s | still on (hold absorbing it) |
+| ... at t+122 s | off |
+| SSID -> `unavailable`, 150 s | still on |
+| SSID -> `unknown`, 150 s | still on |
+| SSID -> `<not connected>` | off after 123 s |
+
+The plug was restored to its original `on` afterwards.
+
+Two triggers with ids rather than one template: the off side needs a
+template so its `for` survives the phone hopping between several other
+SSIDs, while the on side wants a plain `to:` state trigger so arriving
+is instant. No `homeassistant: start` trigger, unlike
+phone-wifi-led4.yaml -- re-applying an LED colour at startup is free,
+re-asserting mains power from a just-restored sensor value is not.
+
+INCIDENT: the last verification step left the sensor at
+`<not connected>` while away-car-aircon.yaml was live on the board,
+and that automation fired at 01:42:46 UTC and really did start the
+vehicle (`last_result=success`, `공조가 켜졌습니다.`,
+`binary_sensor.myhyundai_climate_running=on` at 01:43:27). The test
+had been designed to stay inside away-car-aircon's known-network list,
+but `<not connected>` is deliberately NOT in that list -- it is one of
+the states that automation treats as "away". The earlier test ended on
+`WUNIST_AAA` and was safe; this one was not. `switch.turn_off` on
+`switch.myhyundai_aircon` was blocked by the environment's approval
+policy, so the vehicle was left to its own ~10-minute remote-climate
+limit. Recorded as LP §2.
+
+NOT done:
+
+- The vehicle was never confirmed back off from this session; the
+  turn-off command and even the follow-up state read were both denied
+  by the approval policy. Left with the user.
