@@ -1,0 +1,83 @@
+# Power the monitor only while the phone is on the dorm's own WiFi.
+#
+# The phone's SSID stands in for "the user is at the desk", the same
+# signal phone-wifi-led4.yaml colours LED4 from. Here it switches real
+# mains power, so the two directions are deliberately asymmetric.
+#
+# Only XiaomiDorm55 counts, even though phone-wifi-led4.yaml treats
+# three SSIDs as "the dorm". Seven days of recorder history say the
+# phone does not actually roam between them: XiaomiDorm55 held 18.79 h
+# while ASUS_55 and ASUS_55_24 held 0.00 h each -- one momentary
+# sample apiece on 2026-09-02 13:42 and nothing else. Widening the set
+# would buy nothing and would keep the monitor powered from the far
+# side of the building. This file therefore does NOT have to be edited
+# in step with the other two; if the phone ever starts settling on the
+# ASUS radios, re-check the recorder before changing that.
+#
+# Turning on is immediate: arriving should find the monitor already
+# up. The cost is accepted and measured -- the phone touched
+# XiaomiDorm55 five times for under a minute in that same week, and
+# each of those now flicks the monitor on for the length of the
+# off-hold.
+#
+# Turning off waits two minutes because the phone genuinely drops the
+# network and comes back: the shortest real excursion in the week was
+# 0.1 min (6 s). Two minutes clears that by a wide margin while still
+# cutting power well inside any real absence.
+#
+# `unavailable` and `unknown` are excluded from the off path on
+# purpose. They mean the companion app stopped reporting -- phone
+# dead, app killed, Home Assistant restarting -- not that anyone left
+# the room, and the user may well be working at the monitor when it
+# happens. `<not connected>` is a real report (WiFi off) and does
+# count as away, matching away-car-aircon.yaml.
+#
+# There is no `homeassistant: start` trigger, unlike
+# phone-wifi-led4.yaml. Re-applying an LED colour at startup is free;
+# re-asserting mains power from a sensor value the recorder has just
+# restored is a physical action taken on possibly stale data. The plug
+# keeps its own state across a Home Assistant restart and the next
+# SSID change corrects it.
+#
+# Install with claude_test/ha_add_automation.py.
+alias: Monitor plug on the dorm WiFi
+description: >-
+  Turns the monitor's plug on the moment the phone joins XiaomiDorm55,
+  and off once the phone has been off that network for two minutes.
+mode: single
+
+triggers:
+  - trigger: state
+    entity_id: sensor.sm_f966n_wi_fi_connection
+    to: "XiaomiDorm55"
+    id: arrived
+  # A template trigger rather than a `from`/`not_to` state trigger:
+  # the `for` has to survive the phone hopping between several other
+  # SSIDs, and a state trigger would restart its timer on every hop.
+  - trigger: template
+    value_template: >-
+      {{ states('sensor.sm_f966n_wi_fi_connection') not in
+         ['XiaomiDorm55', 'unavailable', 'unknown'] }}
+    for: "00:02:00"
+    id: left
+
+conditions: []
+
+actions:
+  - choose:
+      - alias: Phone joined the dorm WiFi
+        conditions:
+          - condition: trigger
+            id: arrived
+        sequence:
+          - action: switch.turn_on
+            target:
+              entity_id: switch.dormtapo1
+      - alias: Phone has been off the dorm WiFi for two minutes
+        conditions:
+          - condition: trigger
+            id: left
+        sequence:
+          - action: switch.turn_off
+            target:
+              entity_id: switch.dormtapo1
