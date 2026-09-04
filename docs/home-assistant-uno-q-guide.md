@@ -715,6 +715,82 @@ stops pushing, the sensor keeps its last value, and the automation
 never fires. It is an indicator of a reported network, not a presence
 detector -- `device_tracker.sm_f966n` is the entity for that.
 
+### 9i. When the vehicle command silently stops working
+
+Symptom: `switch.myhyundai_aircon` refuses to stay on,
+`sensor.myhyundai_last_error` reads `E_UNKNOWN_SCREEN: no node matches
+{'content_desc': '공조 켜기'}`, and `sensor.myhyundai_data_updated_at`
+stops advancing. Nothing else announces it — which is why eight
+consecutive failures went unnoticed across 2026-09-02..03.
+
+The recipe taps a control on the home-screen widget, so anything that
+takes the widget off the accessibility tree breaks every sequence.
+Three causes seen on this rig, in the order they are worth checking:
+
+**1. The app process is dead.** The widget then renders as a blank
+grey box and its nodes do not exist at all.
+
+```bash
+adb shell pidof com.hyundai.oneapp.kr      # empty means dead
+adb shell "uiautomator dump /sdcard/w.xml; wc -c < /sdcard/w.xml"
+```
+
+**2. A system overlay holds window focus.** `uiautomator dump` returns
+only the focused window, so a Samsung Circle-to-Search tip
+(`SearcleTip`) is enough to hide the whole launcher — the dump comes
+back at ~2 KB containing nothing but `com.android.systemui`.
+`KEYCODE_BACK` does not dismiss it; a tap on empty wallpaper does,
+after which the dump grows to ~38 KB.
+
+**3. App 1.6.0 refuses to run while USB debugging is on.** It shows a
+modal reading "앱 실행을 위해 USB 디버깅을 꺼주세요" with an
+`USBDEBUG` title. This is the awkward one: the whole component drives
+the phone over ADB, which needs `adb_enabled=1`, and the app now
+objects to exactly that.
+
+It is survivable, because **the widget still repaints behind the
+dialog and a single HOME clears the dialog off the screen**. Measured:
+after `monkey`-launching the app the dump is 4464 bytes with
+`USBDEBUG` present and `공조 켜기` absent; one `KEYCODE_HOME` later it
+is 38876 bytes with `공조 켜기` present. The command path only ever
+taps the widget, never the app, so it works from there.
+
+All three are now handled inside the recipe. Every sequence begins
+with the same self-healing prefix, and each recovery step is
+`optional`, so on a healthy phone they cost time and nothing else:
+
+```json
+{"action": "wake"},
+{"action": "launch_app", "package": "...", "optional": true},
+{"action": "sleep", "seconds": 8},
+{"action": "home"},
+{"action": "wait_focus", "pattern": "Launcher", "timeout": 5, "optional": true},
+{"action": "tap_ratio", "x": 0.5, "y": 0.52, "optional": true},
+{"action": "sleep", "seconds": 1}
+```
+
+The prefix adds up to ~16 s, which pushed the worst case past the
+90-second `sequence_timeout_sec`; it is now set to 120.
+
+**`widget_refresh` is still broken by cause 3** and is not fixed by
+the prefix: it taps the widget's *refresh* control, which brings the
+app back to the foreground, and the dialog then covers the screen
+before the `km` readout can be read. It is disabled
+(`widget_refresh_enabled: false`) so nothing depends on it, but the
+read-only vehicle poll still needs the app alive to read the widget.
+
+Finally, none of these failures were visible without reading logs, so
+`apps/ha-automations/myhyundai-failure-alert.yaml` pushes a
+notification whenever `sensor.myhyundai_last_result` turns `failure`.
+The trigger is the transition, not the state, so a run of failures
+notifies once.
+
+One more thing worth knowing about the switch: its auto-off timer
+**does not send an off command**. `_auto_off` only calls
+`_reset_to_off()`, mirroring the vehicle's own ~10-minute remote
+climate limit in the entity state. The car stops itself; Home
+Assistant just stops claiming otherwise.
+
 ## 10. Troubleshooting
 
 | Symptom | Cause / Fix |

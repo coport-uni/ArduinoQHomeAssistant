@@ -198,6 +198,27 @@ detection, #2 reproducibility guide, #3 WiFi + VS Code Remote-SSH,
   entity; trigger on its recovery from `unavailable` too.
   (from ToDo#44)
 
+- **Problem**: `uiautomator dump` returned ~2 KB of
+  `com.android.systemui` and nothing else, so every node lookup
+  failed. **Cause**: A Samsung Circle-to-Search tip window
+  (`SearcleTip`) held window focus, and the dump only covers the
+  focused window. **Fix**: Tap empty wallpaper -- `KEYCODE_BACK` does
+  not dismiss it -- after which the dump grew to ~38 KB. **Rule**:
+  Always check `dumpsys window | grep mCurrentFocus` before believing
+  a uiautomator dump that looks empty. (from ToDo#49)
+- **Problem**: MyHyundai app 1.6.0 refuses to run while USB debugging
+  is on, showing a modal "앱 실행을 위해 USB 디버깅을 꺼주세요" --
+  and the component drives the phone over ADB, which requires exactly
+  that setting. **Cause**: An app-side anti-tampering check added by
+  an update (`lastUpdateTime` 2026-09-03 13:15, version 1.5.1 ->
+  1.6.0). **Fix**: Do not fight it. The home-screen widget still
+  repaints behind the dialog and a single `KEYCODE_HOME` clears the
+  dialog off screen (dump 4464 bytes with the dialog, 38876 bytes
+  after HOME), and the command path taps only the widget. **Rule**:
+  Never assume an Android automation target is stable across app
+  updates; check `dumpsys package <pkg> | grep lastUpdateTime` first
+  when a working recipe suddenly stops matching. (from ToDo#49)
+
 ## §4. Workflow Lessons
 
 - **Problem**: CLAUDE.md §4 requires GitHub issue/branch/PR but the repo
@@ -234,6 +255,25 @@ detection, #2 reproducibility guide, #3 WiFi + VS Code Remote-SSH,
   (`claude_test/away_trigger_probe.yaml`). **Rule**: Always split
   trigger verification from action verification when the action is not
   free to repeat. (from ToDo#47)
+
+- **Problem**: An automation was shipped and verified while the path
+  it commands had been broken for two days. **Cause**: The trigger was
+  tested thoroughly (probe automation, measured hold) but the action
+  was left as "the user's call to authorise", so nothing exercised it
+  end to end. **Fix**: Run the real action once, with the user's
+  consent, before calling the feature done -- doing so surfaced three
+  faults that no amount of trigger testing would have found. **Rule**:
+  Always exercise the action side at least once; a verified trigger
+  attached to a broken action is a feature that does nothing.
+  (from ToDo#49)
+- **Problem**: Nothing surfaced eight consecutive vehicle-command
+  failures across two days. **Cause**: Every failure mode is silent --
+  the switch falls back to off and only `sensor.myhyundai_last_error`
+  records anything. **Fix**: An automation on `last_result` turning
+  `failure` that pushes to the phone
+  (`apps/ha-automations/myhyundai-failure-alert.yaml`). **Rule**:
+  Always give an automation that runs unattended a way to complain;
+  an error sensor nobody reads is not an alert. (from ToDo#49)
 
 ## §5. Environment Specifics
 

@@ -1763,3 +1763,85 @@ cooldown, reachable phone).
 - [x] Correct the wording in the LED YAML header, guide §9g/§9h, the
       README results row and the PR #48 body
 
+
+## 2026-09-04 — Live aircon run, and the three faults it exposed
+
+Requested by user ("지금 공조장치를 활성화해줘"), then ("두가지 모두
+진행해줘") for both remediations. GitHub issue #49.
+
+The first live `switch.myhyundai_aircon` turn-on failed. The log
+showed it was not new: EVERY attempt from 2026-09-02 23:10 to
+2026-09-03 23:05 had failed the same way -- eight of them -- and
+vehicle data had been frozen since 2026-09-03 23:03. The automation
+built the day before was live but inert.
+
+- [x] Diagnose the failure rather than retrying it
+- [x] Get the aircon actually running
+- [x] Recipe-level self-healing so a dead widget host recovers itself
+- [x] Failure notification so a silent break cannot repeat
+- [x] Document all of it
+
+### Results (2026-09-04)
+
+Three independent faults, all invisible from Home Assistant:
+
+1. The MyHyundai app process was dead, so the home-screen widget
+   rendered as a blank grey box and the `공조 켜기` node did not
+   exist. Launching the app repainted it.
+2. A Samsung Circle-to-Search tip (`SearcleTip`) held window focus,
+   and `uiautomator dump` only covers the focused window -- it
+   returned 1932 bytes of `com.android.systemui` and nothing else.
+   `KEYCODE_BACK` did not clear it; a tap on empty wallpaper did, and
+   the dump grew to 38822 bytes.
+3. App 1.6.0 (updated 2026-09-03 13:15, from the 1.5.1 that HA had
+   recorded) refuses to run while USB debugging is on and shows a
+   modal `USBDEBUG` dialog -- while the whole component drives the
+   phone over ADB, which requires `adb_enabled=1`.
+
+Fault 3 sounds fatal and is not: the widget repaints behind the
+dialog and one HOME clears it off screen. Measured directly --
+4464 bytes with `USBDEBUG` present and `공조 켜기` absent, then
+38876 bytes with `공조 켜기` present after a single `KEYCODE_HOME`.
+The command path taps the widget, never the app.
+
+With all three cleared by hand the aircon ran: `last_result=success`,
+vehicle notification `공조가 켜졌습니다.`,
+`binary_sensor.myhyundai_climate_running=on`, battery 85 %.
+
+Both remediations shipped:
+
+- **Self-healing recipe.** Every sequence now opens with wake ->
+  launch_app -> sleep 8 -> home -> wait_focus -> tap_ratio(0.5, 0.52)
+  -> sleep 1, with every recovery step marked `optional` so a healthy
+  phone is never broken by them. Validated against the component's own
+  `_RECIPE_SCHEMA` before install. The prefix costs up to ~16 s, which
+  pushed the worst case past the 90 s `sequence_timeout_sec`, so that
+  option was raised to 120 through the options flow (REST, not
+  WebSocket -- `config_entries/options/flow` is not a WS command).
+- **Failure alert.** `apps/ha-automations/myhyundai-failure-alert.yaml`
+  pushes to the phone and creates a persistent notification when
+  `sensor.myhyundai_last_result` turns `failure`. Triggered on the
+  transition, not the state, so a run of failures notifies once.
+  Tested by forcing success -> failure: automation fired at 00:12:10
+  and the notify service raised nothing.
+
+An earlier draft of the recipe also tapped a `확인` node to dismiss
+the dialog. It was removed: HOME alone clears it, measured, and a step
+that never does anything is not worth 4 s on every command.
+
+NOT done:
+
+- No second live vehicle command. The `aircon_off` run that would have
+  proved the self-healing prefix on a real command path was blocked by
+  the environment's approval policy, so the prefix is verified at the
+  adb level (force-stop -> launch -> home -> `공조 켜기` visible) but
+  not yet through a full sequence.
+- `widget_refresh` is still broken by fault 3 and the prefix does not
+  fix it: it taps the widget's refresh control, which brings the app
+  forward and lets the dialog cover the screen. It is disabled in the
+  options, so nothing depends on it.
+
+Worth recording about the switch itself: `_auto_off` only calls
+`_reset_to_off()`. It sends NO off command -- it mirrors the vehicle's
+own ~10-minute remote-climate limit in the entity state.
+
